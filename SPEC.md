@@ -6,16 +6,16 @@
 
 ## Integrantes da dupla
 
-- **Aluno 1 - Nome**: <mark>`<preencher>`</mark>
-- **Aluno 1 - Cartão UFRGS**: <mark>`<preencher>`</mark>
+- **Aluno 1 - Nome**: <mark>`Arthur Andrade da Silva`</mark>
+- **Aluno 1 - Cartão UFRGS**: <mark>`00588758`</mark>
 
-- **Aluno 2 - Nome**: <mark>`<preencher>`</mark>
-- **Aluno 2 - Cartão UFRGS**: <mark>`<preencher>`</mark>
+- **Aluno 2 - Nome**: <mark>`Eduarda Carvalho Waechter`</mark>
+- **Aluno 2 - Cartão UFRGS**: <mark>`00304585`</mark>
 
 ## Detalhes do que será implementado
 
-- **Título do trabalho**: <mark>`<preencher>`</mark>
-- **Parágrafo curto descrevendo o que será implementado**: <mark>`<preencher>`</mark>
+- **Título do trabalho**: <mark>`Quack`</mark>
+- **Parágrafo curto descrevendo o que será implementado**: <mark>`Jogo de tiro em primeira pessoa baseado em Quake, no qual o objetivo é chegar ao final da fase lutando contra inimigos.`</mark>
 
 ## Especificação visual
 
@@ -34,7 +34,7 @@
 >   do próprio repositório. Mas, garanta que qualquer um tenha
 >   permissão de acesso ao vídeo através deste link.
 
-<mark>`<preencher>`</mark>
+<mark>`https://www.youtube.com/watch?v=4-3lF5BCnzA`</mark>
 
 ### Vídeo - Timestamp
 
@@ -43,8 +43,8 @@
 >   será a base de comparação para avaliar se o seu trabalho final
 >   conseguiu ou não reproduzir a referência.
 
-- **Timestamp inicial**: <mark>`<preencher>`</mark>
-- **Timestamp final**: <mark>`<preencher>`</mark>
+- **Timestamp inicial**: <mark>`00:30`</mark>
+- **Timestamp final**: <mark>`01:00`</mark>
 
 ### Imagens
 
@@ -57,33 +57,37 @@
 ## Especificação textual
 
 Para cada um dos requisitos abaixo (detalhados no [Enunciado do Trabalho final - Moodle](https://moodle.ufrgs.br/mod/assign/view.php?id=6018620)), escreva um parágrafo **curto** explicando como este requisito será atendido, apontando itens específicos do vídeo/imagens que você incluiu acima que atendem estes requisitos.
+1. <img width="1060" height="590" alt="image" src="https://github.com/user-attachments/assets/3c5cf758-9918-4bd3-aeec-506f431fe0dd" />
+2. <img width="1578" height="899" alt="image" src="https://github.com/user-attachments/assets/b9a8b497-825c-4972-b8d2-be1be7094190" />
+3. <img width="1599" height="899" alt="image" src="https://github.com/user-attachments/assets/bbec0cfd-10d1-4052-8041-43d1a50cb34f" />
+
 
 ### Malhas poligonais complexas
-<mark>`<preencher>`</mark>
+<mark>`Os inimigos, armas e itens serão formados por malhas pologionais complexas, como visto na primeira imagem, conforme o print 1`</mark>
 
 ### Transformações geométricas controladas pelo usuário
-<mark>`<preencher>`</mark>
+<mark>`O recúo da arma do personagem que o usuário controla ao atirar. Conforme a segunda imagem`</mark>
 
 ### Diferentes tipos de câmeras
-<mark>`<preencher>`</mark>
+<mark>`Conforme o print 1, haverá câmera em primeira pessoa e, futuramente implementado, uma câmera em terceira pessoa que será acionada quando o personagem morrer.`</mark>
 
 ### Instâncias de objetos
-<mark>`<preencher>`</mark>
+<mark>`Conforme o print 2, terão caixas de munição, projéteis que sairão da arma do jogador, etc.`</mark>
 
 ### Testes de intersecção
-<mark>`<preencher>`</mark>
+<mark>`Conforme o print 3, o usuário não pode atravessar paredes do cenário.`</mark>
 
 ### Modelos de Iluminação em todos os objetos
-<mark>`<preencher>`</mark>
+<mark>`Conforme o print 2, no qual a iluminação vem do teto, ela está sombreando a porta e a parede do lado dela.`</mark>
 
 ### Mapeamento de texturas em todos os objetos
-<mark>`<preencher>`</mark>
+<mark>`Conforme todos os prints, cada inimigo/arma/parte do cenário tem sua própria textura.`</mark>
 
 ### Movimentação com curva Bézier cúbica
-<mark>`<preencher>`</mark>
+<mark>`Será futuramente implementado na trajetória que o projétil disparado por armas faz.`</mark>
 
 ### Animações baseadas no tempo ($\Delta t$)
-<mark>`<preencher>`</mark>
+<mark>`Conforme o print 2, haverá a movimentação do personagem, dos inimigos e dos projéteis.`</mark>
 
 ## Limitações esperadas
 
@@ -94,4 +98,8 @@ Para cada um dos requisitos abaixo (detalhados no [Enunciado do Trabalho final -
 > - Para cada item, **explique por que** não será implementado ou por
 >   que será implementado parcialmente.
 
-<mark>`<preencher>`</mark>
+<mark>`Haverão 3 limitações:
+1. Sangue ao um projétil acertar o inimigo: Consideramos desnecessário dentro do escopo do trabalho, uma vez que é apenas uma particula instanciada que não interage com os outros elementos.
+2. Número de armas/munição presentes: Apenas uma arma será implementada, visando aproveitar melhor a curta duração da fase e concentrando o esforço em uma arma funcional.
+3. Água no cenário: Não será implementada a parte de baixo do cenário, apresentada nos segundos finais do vídeo, por limitações de escopo.
+`</mark>
