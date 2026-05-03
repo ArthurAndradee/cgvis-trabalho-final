@@ -199,6 +199,15 @@ float g_CameraTheta = 0.0f; // Ângulo no plano ZX em relação ao eixo Z
 float g_CameraPhi = 0.0f;   // Ângulo em relação ao eixo Y
 float g_CameraDistance = 3.5f; // Distância da câmera para a origem
 
+// --- VARIÁVEIS PARA O QUACK (Câmera FPS) ---
+glm::vec4 g_CameraPosition = glm::vec4(0.0f, 0.0f, 3.5f, 1.0f); // Posição inicial do jogador
+
+// Flags de movimentação (para movimento suave e contínuo)
+bool g_WPressed = false;
+bool g_APressed = false;
+bool g_SPressed = false;
+bool g_DPressed = false;
+
 // Variáveis que controlam rotação do antebraço
 float g_ForearmAngleZ = 0.0f;
 float g_ForearmAngleX = 0.0f;
@@ -254,7 +263,7 @@ int main(int argc, char* argv[])
     // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
     // de pixels, e com título "INF01047 ...".
     GLFWwindow* window;
-    window = glfwCreateWindow(800, 600, "INF01047 - Seu Cartao - Seu Nome", NULL, NULL);
+    window = glfwCreateWindow(800, 600, "INF01047 - Quack", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -265,12 +274,15 @@ int main(int argc, char* argv[])
     // Definimos a função de callback que será chamada sempre que o usuário
     // pressionar alguma tecla do teclado ...
     glfwSetKeyCallback(window, KeyCallback);
+
     // ... ou clicar os botões do mouse ...
     glfwSetMouseButtonCallback(window, MouseButtonCallback);
     // ... ou movimentar o cursor do mouse em cima da janela ...
     glfwSetCursorPosCallback(window, CursorPosCallback);
     // ... ou rolar a "rodinha" do mouse.
     glfwSetScrollCallback(window, ScrollCallback);
+    // ADICIONE ESTA LINHA: Trava o cursor do mouse na janela e o oculta (Modo FPS)
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     // Indicamos que as chamadas OpenGL deverão renderizar nesta janela
     glfwMakeContextCurrent(window);
@@ -333,68 +345,65 @@ int main(int argc, char* argv[])
     glFrontFace(GL_CCW);
 
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
+ // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
         // Aqui executamos as operações de renderização
 
-        // Definimos a cor do "fundo" do framebuffer como branco.  Tal cor é
-        // definida como coeficientes RGBA: Red, Green, Blue, Alpha; isto é:
-        // Vermelho, Verde, Azul, Alpha (valor de transparência).
-        // Conversaremos sobre sistemas de cores nas aulas de Modelos de Iluminação.
-        //
-        //           R     G     B     A
+        // Definimos a cor do "fundo" do framebuffer como branco.
         glClearColor(0.9f, 0.9f, 1.0f, 1.0f);
-
-        // "Pintamos" todos os pixels do framebuffer com a cor definida acima,
-        // e também resetamos todos os pixels do Z-buffer (depth buffer).
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Pedimos para a GPU utilizar o programa de GPU criado acima (contendo
-        // os shaders de vértice e fragmentos).
+        // Pedimos para a GPU utilizar o programa de GPU criado acima
         glUseProgram(g_GpuProgramID);
 
-        // Computamos a posição da câmera utilizando coordenadas esféricas.  As
-        // variáveis g_CameraDistance, g_CameraPhi, e g_CameraTheta são
-        // controladas pelo mouse do usuário. Veja as funções CursorPosCallback()
-        // e ScrollCallback().
-        float r = g_CameraDistance;
-        float y = r*sin(g_CameraPhi);
-        float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
-        float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
+        // ------------------------------------------------------------------
+        // CÁLCULO DE DELTA TIME (Animação baseada no tempo)
+        // ------------------------------------------------------------------
+        static float lastTime = (float)glfwGetTime();
+        float currentTime = (float)glfwGetTime();
+        float deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
 
-        // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
-        // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::vec4 camera_position_c  = glm::vec4(x,y,z,1.0f); // Ponto "c", centro da câmera
-        glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
-        glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
-        glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+        // ------------------------------------------------------------------
+        // LÓGICA DA CÂMERA FPS (QUACK)
+        // ------------------------------------------------------------------
+        float y = sin(g_CameraPhi);
+        float z = cos(g_CameraPhi) * cos(g_CameraTheta);
+        float x = cos(g_CameraPhi) * sin(g_CameraTheta);
+        
+        glm::vec4 camera_view_vector = glm::vec4(x, y, z, 0.0f); // Vetor "Front"
+        glm::vec4 camera_up_vector   = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f); // Vetor "Up"
+        
+        // Calculamos o vetor "Right" (vetor 'u') usando Produto Vetorial para andar pros lados (A e D)
+        glm::vec4 camera_right_vector = crossproduct(camera_view_vector, camera_up_vector);
+        camera_right_vector = camera_right_vector / norm(camera_right_vector); 
 
-        // Computamos a matriz "View" utilizando os parâmetros da câmera para
-        // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::mat4 view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+        // Atualizamos a posição da câmera baseada no WASD e no Delta Time
+        float speed = 4.0f * deltaTime; // Velocidade do jogador
+        
+        if (g_WPressed) g_CameraPosition += camera_view_vector * speed;
+        if (g_SPressed) g_CameraPosition -= camera_view_vector * speed;
+        if (g_APressed) g_CameraPosition -= camera_right_vector * speed;
+        if (g_DPressed) g_CameraPosition += camera_right_vector * speed;
 
-        // Agora computamos a matriz de Projeção.
+        // Passamos os parâmetros atualizados para a matriz View
+        glm::mat4 view = Matrix_Camera_View(g_CameraPosition, camera_view_vector, camera_up_vector);
+
+        // ------------------------------------------------------------------
+        // PROJEÇÃO E RENDERIZAÇÃO (RESTAURADO)
+        // ------------------------------------------------------------------
         glm::mat4 projection;
-
-        // Note que, no sistema de coordenadas da câmera, os planos near e far
-        // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
         float nearplane = -0.1f;  // Posição do "near plane"
         float farplane  = -10.0f; // Posição do "far plane"
 
         if (g_UsePerspectiveProjection)
         {
-            // Projeção Perspectiva.
-            // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
             float field_of_view = 3.141592 / 3.0f;
             projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
         }
         else
         {
-            // Projeção Ortográfica.
-            // Para definição dos valores l, r, b, t ("left", "right", "bottom", "top"),
-            // PARA PROJEÇÃO ORTOGRÁFICA veja slides 219-224 do documento Aula_09_Projecoes.pdf.
-            // Para simular um "zoom" ortográfico, computamos o valor de "t"
-            // utilizando a variável g_CameraDistance.
             float t = 1.5f*g_CameraDistance/2.5f;
             float b = -t;
             float r = t*g_ScreenRatio;
@@ -405,8 +414,6 @@ int main(int argc, char* argv[])
         glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
 
         // Enviamos as matrizes "view" e "projection" para a placa de vídeo
-        // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
-        // efetivamente aplicadas em todos os pontos.
         glUniformMatrix4fv(g_view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
@@ -436,29 +443,13 @@ int main(int argc, char* argv[])
         glUniform1i(g_object_id_uniform, PLANE);
         DrawVirtualObject("the_plane");
 
-        // Imprimimos na tela os ângulos de Euler que controlam a rotação do
-        // terceiro cubo.
+        // Interface 2D (HUD)
         TextRendering_ShowEulerAngles(window);
-
-        // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
         TextRendering_ShowProjection(window);
-
-        // Imprimimos na tela informação sobre o número de quadros renderizados
-        // por segundo (frames per second).
         TextRendering_ShowFramesPerSecond(window);
 
-        // O framebuffer onde OpenGL executa as operações de renderização não
-        // é o mesmo que está sendo mostrado para o usuário, caso contrário
-        // seria possível ver artefatos conhecidos como "screen tearing". A
-        // chamada abaixo faz a troca dos buffers, mostrando para o usuário
-        // tudo que foi renderizado pelas funções acima.
-        // Veja o link: https://en.wikipedia.org/w/index.php?title=Multiple_buffering&oldid=793452829#Double_buffering_in_computer_graphics
+        // Troca os buffers e processa inputs (Isso faz o jogo não travar!)
         glfwSwapBuffers(window);
-
-        // Verificamos com o sistema operacional se houve alguma interação do
-        // usuário (teclado, mouse, ...). Caso positivo, as funções de callback
-        // definidas anteriormente usando glfwSet*Callback() serão chamadas
-        // pela biblioteca GLFW.
         glfwPollEvents();
     }
 
@@ -1061,6 +1052,7 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 // que possamos calcular quanto que o mouse se movimentou entre dois instantes
 // de tempo. Utilizadas no callback CursorPosCallback() abaixo.
 double g_LastCursorPosX, g_LastCursorPosY;
+bool g_FirstMouse = true; // <-- ADICIONE ESTA VARIÁVEL
 
 // Função callback chamada sempre que o usuário aperta algum dos botões do mouse
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
@@ -1117,71 +1109,42 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 
 // Função callback chamada sempre que o usuário movimentar o cursor do mouse em
 // cima da janela OpenGL.
+// Função callback chamada sempre que o usuário movimentar o cursor do mouse em
+// cima da janela OpenGL.
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
 {
-    // Abaixo executamos o seguinte: caso o botão esquerdo do mouse esteja
-    // pressionado, computamos quanto que o mouse se movimento desde o último
-    // instante de tempo, e usamos esta movimentação para atualizar os
-    // parâmetros que definem a posição da câmera dentro da cena virtual.
-    // Assim, temos que o usuário consegue controlar a câmera.
-
-    if (g_LeftMouseButtonPressed)
+    // Previne um "pulo" da câmera no primeiro frame
+    if (g_FirstMouse)
     {
-        // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
-        float dx = xpos - g_LastCursorPosX;
-        float dy = ypos - g_LastCursorPosY;
-    
-        // Atualizamos parâmetros da câmera com os deslocamentos
-        g_CameraTheta -= 0.01f*dx;
-        g_CameraPhi   += 0.01f*dy;
-    
-        // Em coordenadas esféricas, o ângulo phi deve ficar entre -pi/2 e +pi/2.
-        float phimax = 3.141592f/2;
-        float phimin = -phimax;
-    
-        if (g_CameraPhi > phimax)
-            g_CameraPhi = phimax;
-    
-        if (g_CameraPhi < phimin)
-            g_CameraPhi = phimin;
-    
-        // Atualizamos as variáveis globais para armazenar a posição atual do
-        // cursor como sendo a última posição conhecida do cursor.
         g_LastCursorPosX = xpos;
         g_LastCursorPosY = ypos;
+        g_FirstMouse = false;
     }
 
-    if (g_RightMouseButtonPressed)
-    {
-        // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
-        float dx = xpos - g_LastCursorPosX;
-        float dy = ypos - g_LastCursorPosY;
-    
-        // Atualizamos parâmetros da antebraço com os deslocamentos
-        g_ForearmAngleZ -= 0.01f*dx;
-        g_ForearmAngleX += 0.01f*dy;
-    
-        // Atualizamos as variáveis globais para armazenar a posição atual do
-        // cursor como sendo a última posição conhecida do cursor.
-        g_LastCursorPosX = xpos;
-        g_LastCursorPosY = ypos;
-    }
+    // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
+    float dx = xpos - g_LastCursorPosX;
+    float dy = ypos - g_LastCursorPosY;
 
-    if (g_MiddleMouseButtonPressed)
-    {
-        // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
-        float dx = xpos - g_LastCursorPosX;
-        float dy = ypos - g_LastCursorPosY;
+    // Atualizamos parâmetros da câmera com os deslocamentos
+    g_CameraTheta -= 0.01f * dx; // Eixo X (Yaw)
     
-        // Atualizamos parâmetros da antebraço com os deslocamentos
-        g_TorsoPositionX += 0.01f*dx;
-        g_TorsoPositionY -= 0.01f*dy;
-    
-        // Atualizamos as variáveis globais para armazenar a posição atual do
-        // cursor como sendo a última posição conhecida do cursor.
-        g_LastCursorPosX = xpos;
-        g_LastCursorPosY = ypos;
-    }
+    // EIXO Y INVERTIDO: antes era +=, agora é -=
+    g_CameraPhi   -= 0.01f * dy; // Eixo Y (Pitch)
+
+    // Em coordenadas esféricas, o ângulo phi deve ficar entre -pi/2 e +pi/2.
+    // Isso impede que a câmera dê um "loop" por cima da cabeça (gimbal lock na matemática base).
+    float phimax = 3.141592f / 2.0f - 0.01f; // Subtraímos um pouquinho (0.01f) para evitar travar exatamente no 90º
+    float phimin = -phimax;
+
+    if (g_CameraPhi > phimax)
+        g_CameraPhi = phimax;
+
+    if (g_CameraPhi < phimin)
+        g_CameraPhi = phimin;
+
+    // Atualizamos as variáveis globais para armazenar a posição atual do cursor
+    g_LastCursorPosX = xpos;
+    g_LastCursorPosY = ypos;
 }
 
 // Função callback chamada sempre que o usuário movimenta a "rodinha" do mouse.
@@ -1277,6 +1240,24 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         LoadShadersFromFiles();
         fprintf(stdout,"Shaders recarregados!\n");
         fflush(stdout);
+    }
+
+    // Movimentação do Quack (WASD)
+    if (key == GLFW_KEY_W) {
+        if (action == GLFW_PRESS) g_WPressed = true;
+        else if (action == GLFW_RELEASE) g_WPressed = false;
+    }
+    if (key == GLFW_KEY_S) {
+        if (action == GLFW_PRESS) g_SPressed = true;
+        else if (action == GLFW_RELEASE) g_SPressed = false;
+    }
+    if (key == GLFW_KEY_A) {
+        if (action == GLFW_PRESS) g_APressed = true;
+        else if (action == GLFW_RELEASE) g_APressed = false;
+    }
+    if (key == GLFW_KEY_D) {
+        if (action == GLFW_PRESS) g_DPressed = true;
+        else if (action == GLFW_RELEASE) g_DPressed = false;
     }
 }
 
