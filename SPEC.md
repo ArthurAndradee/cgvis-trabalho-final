@@ -103,3 +103,5 @@ Para cada um dos requisitos abaixo (detalhados no [Enunciado do Trabalho final -
 2. Número de armas/munição presentes: Apenas uma arma será implementada, visando aproveitar melhor a curta duração da fase e concentrando o esforço em uma arma funcional.
 3. Água no cenário: Não será implementada a parte de baixo do cenário, apresentada nos segundos finais do vídeo, por limitações de escopo.
 `</mark>
+
+> Comentário Professor: OK
