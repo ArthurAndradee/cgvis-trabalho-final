@@ -37,16 +37,16 @@
 
 const int MAP_SIZE = 10;
 int gameMap[MAP_SIZE][MAP_SIZE] = {
-    {1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-    {1, 0, 0, 0, 2, 0, 0, 0, 3, 1},
-    {1, 0, 1, 1, 0, 0, 1, 1, 0, 1},
-    {1, 0, 1, 0, 0, 0, 0, 1, 0, 1},
-    {1, 0, 0, 0, 2, 0, 0, 0, 0, 1},
-    {1, 0, 1, 0, 0, 0, 0, 1, 0, 1},
-    {1, 0, 1, 1, 0, 0, 1, 1, 0, 1},
-    {1, 3, 0, 0, 0, 2, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 2, 0, 0, 0, 3, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 2, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 3, 0, 0, 0, 2, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
 struct ObjModel {
@@ -85,10 +85,13 @@ struct SceneObject {
     GLuint       vertex_array_object_id; 
     glm::vec3    bbox_min; 
     glm::vec3    bbox_max;
+    GLuint       texture_id;
 };
 
 std::map<std::string, SceneObject> g_VirtualScene;
 std::stack<glm::mat4>  g_MatrixStack;
+std::map<std::string, GLuint> g_TextureCache; 
+GLuint g_DefaultTexture = 0;
 float g_ScreenRatio = 1.0f;
 float g_AngleX = 0.0f;
 float g_AngleY = 0.0f;
@@ -100,8 +103,28 @@ float g_CameraTheta = 0.0f;
 float g_CameraPhi = 0.0f;   
 float g_CameraDistance = 3.5f; 
 
-// Variáveis FPS
-glm::vec4 g_CameraPosition = glm::vec4(2.0f, 1.0f, 2.0f, 1.0f);
+// --- CONFIGURAÇÕES DO QUACK ---
+// 1. Escala do Mapa (Aumentada para o mapa ficar bem maior)
+float g_MapScale = 0.50f; 
+
+// 2. Spawn inicial do Jogador (Ajuste X, Y e Z para nascer onde quiser)
+glm::vec4 g_CameraPosition = glm::vec4(0.0f, 2.0f, 5.0f, 1.0f);
+
+// 3. Sistema de Spawn Exato para Itens e Inimigos
+struct EntitySpawn {
+    int type;
+    float x, y, z;
+    float scale;
+};
+
+// Adicione quantos elementos quiser na posição exata que desejar
+std::vector<EntitySpawn> mapEntities = {
+    { ALIEN,  10.0f,  0.0f, -5.0f,  0.5f },
+    { ALIEN, -15.0f,  0.0f,  8.0f,  0.5f },
+    { BOX,     5.0f,  0.25f, 2.0f,  0.5f },
+    { BOX,    -2.0f,  0.25f, 12.0f, 0.5f }
+};
+
 bool g_WPressed = false;
 bool g_APressed = false;
 bool g_SPressed = false;
@@ -168,12 +191,14 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_D) g_DPressed = (action != GLFW_RELEASE);
 }
 
-void PushMatrix(glm::mat4 M) { g_MatrixStack.push(M); }
-void PopMatrix(glm::mat4& M) { if (g_MatrixStack.empty()) M = Matrix_Identity(); else { M = g_MatrixStack.top(); g_MatrixStack.pop(); } }
-void BuildTrianglesAndAddToVirtualScene(ObjModel* model); 
+void PushMatrix(glm::mat4 M); 
+void PopMatrix(glm::mat4& M); 
+// CORRIGIDO: Adicionado o basepath para ler o .mtl corretamente
+void BuildTrianglesAndAddToVirtualScene(ObjModel* model, const char* basepath = NULL); 
 void ComputeNormals(ObjModel* model); 
 void LoadShadersFromFiles(); 
-void LoadTextureImage(const char* filename); 
+// CORRIGIDO: A função agora retorna GLuint na declaração para bater com a implementação!
+GLuint LoadTextureImage(const char* filename); 
 void DrawVirtualObject(const char* object_name); 
 GLuint LoadShader_Vertex(const char* filename);   
 GLuint LoadShader_Fragment(const char* filename); 
@@ -187,7 +212,6 @@ void TextRendering_ShowFramesPerSecond(GLFWwindow* window);
 
 void DrawModel(ObjModel* model) {
     for (size_t i = 0; i < model->shapes.size(); ++i) {
-        // Criamos a chave única anexando o índice da malha
         std::string unique_name = model->shapes[i].name + "_" + std::to_string(i);
         DrawVirtualObject(unique_name.c_str());
     }
@@ -198,34 +222,56 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height) {
     g_ScreenRatio = (float)width / height;
 }
 
-void LoadTextureImage(const char* filename) {
+GLuint LoadTextureImage(const char* filename) {
+    // Se a textura já foi carregada antes, devolvemos ela da memória!
+    if (g_TextureCache.find(filename) != g_TextureCache.end()) 
+        return g_TextureCache[filename];
+
+    printf("Carregando imagem \"%s\"... ", filename);
     stbi_set_flip_vertically_on_load(true);
     int width, height, channels;
     unsigned char *data = stbi_load(filename, &width, &height, &channels, 3);
-    if ( data == NULL ) { fprintf(stderr, "ERROR: Cannot open image file \"%s\".\n", filename); std::exit(EXIT_FAILURE); }
-    GLuint texture_id, sampler_id;
+    
+    if ( data == NULL ) { 
+        printf("AVISO: Imagem nao encontrada. O objeto ficara sem textura.\n"); 
+        return 0; // Se não achar a imagem, retorna 0 (evita crash do jogo)
+    }
+    printf("OK (%dx%d).\n", width, height);
+
+    GLuint texture_id;
     glGenTextures(1, &texture_id);
-    glGenSamplers(1, &sampler_id);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
     glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-    GLuint textureunit = g_NumLoadedTextures;
-    glActiveTexture(GL_TEXTURE0 + textureunit);
-    glBindTexture(GL_TEXTURE_2D, texture_id);
+
     glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
-    glBindSampler(textureunit, sampler_id);
     stbi_image_free(data);
-    g_NumLoadedTextures += 1;
+    
+    g_TextureCache[filename] = texture_id; // Salva no cache
+    return texture_id;
 }
 
 void DrawVirtualObject(const char* object_name) {
     if (g_VirtualScene.find(object_name) == g_VirtualScene.end()) return; 
+
+    // --- MAGIA ACONTECENDO AQUI ---
+    // Resgatamos a textura exata salva para este pedaço do modelo 3D
+    GLuint tex_id = g_VirtualScene[object_name].texture_id;
+    if (tex_id == 0) tex_id = g_DefaultTexture; // Usa a textura padrão se der erro
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex_id);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage"), 0);
+    // ------------------------------
+
     glBindVertexArray(g_VirtualScene[object_name].vertex_array_object_id);
     glm::vec3 bbox_min = g_VirtualScene[object_name].bbox_min;
     glm::vec3 bbox_max = g_VirtualScene[object_name].bbox_max;
@@ -307,7 +353,7 @@ void ComputeNormals(ObjModel* model) {
     }
 }
 
-void BuildTrianglesAndAddToVirtualScene(ObjModel* model) {
+void BuildTrianglesAndAddToVirtualScene(ObjModel* model, const char* basepath) {
     GLuint vertex_array_object_id;
     glGenVertexArrays(1, &vertex_array_object_id);
     glBindVertexArray(vertex_array_object_id);
@@ -345,9 +391,20 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model) {
             }
         }
         size_t last_index = indices.size() - 1;
-
-        // Criamos a chave única anexando o índice da malha
         std::string unique_name = model->shapes[shape].name + "_" + std::to_string(shape);
+
+        // --- LÊ O ARQUIVO DE MATERIAL E CARREGA A IMAGEM CORRETA DA PASTA ---
+        GLuint shape_texture_id = 0;
+        if (basepath != NULL && !model->materials.empty() && !model->shapes[shape].mesh.material_ids.empty()) {
+            int mat_id = model->shapes[shape].mesh.material_ids[0];
+            if (mat_id >= 0 && mat_id < model->materials.size()) {
+                std::string texname = model->materials[mat_id].diffuse_texname;
+                if (!texname.empty()) {
+                    std::string fullpath = std::string(basepath) + texname;
+                    shape_texture_id = LoadTextureImage(fullpath.c_str());
+                }
+            }
+        }
 
         SceneObject theobject;
         theobject.name           = unique_name;
@@ -357,8 +414,8 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model) {
         theobject.vertex_array_object_id = vertex_array_object_id;
         theobject.bbox_min = bbox_min;
         theobject.bbox_max = bbox_max;
+        theobject.texture_id = shape_texture_id; // Salva a textura do Quake!
         
-        // Salva no dicionário usando a nossa chave única garantida
         g_VirtualScene[unique_name] = theobject;
     }
 
@@ -457,24 +514,25 @@ int main(int argc, char* argv[])
 
     LoadShadersFromFiles();
 
-    // Texturas
-    LoadTextureImage("../../assets/rock_wall_04_1k/textures/rock_wall_04_diff_1k.jpg"); 
-    LoadTextureImage("../../assets/alien_obj/SectoidSoldier_DIF.jpg");                  
-    LoadTextureImage("../../assets/box_obj/texture.jpg");                               
-    LoadTextureImage("../../assets/gun_obj/Ar_10_texture.jpg");                         
+    // Carregamos a textura de tijolos como um fallback padrão
+    g_DefaultTexture = LoadTextureImage("../../data/red_brick_diff_1k.jpg");
 
-    // Modelos
+    // Modelos (Repare no segundo parâmetro apontando para a pasta das texturas)
     ObjModel alienModel("../../assets/alien_obj/VG59BZPNHSI70DYK7XZUK7B4F.obj");
-    ComputeNormals(&alienModel); BuildTrianglesAndAddToVirtualScene(&alienModel);
+    ComputeNormals(&alienModel); 
+    BuildTrianglesAndAddToVirtualScene(&alienModel, "../../assets/alien_obj/");
 
     ObjModel boxModel("../../assets/box_obj/0WITZ8WLUCO2UQ5HBO68QE9ZR.obj");
-    ComputeNormals(&boxModel); BuildTrianglesAndAddToVirtualScene(&boxModel);
+    ComputeNormals(&boxModel); 
+    BuildTrianglesAndAddToVirtualScene(&boxModel, "../../assets/box_obj/");
 
     ObjModel gunModel("../../assets/gun_obj/4M495IHA13QVT7Z1F2JJ4T2OJ.obj");
-    ComputeNormals(&gunModel); BuildTrianglesAndAddToVirtualScene(&gunModel);
+    ComputeNormals(&gunModel); 
+    BuildTrianglesAndAddToVirtualScene(&gunModel, "../../assets/gun_obj/");
     
-    ObjModel planemodel("../../data/plane.obj");
-    ComputeNormals(&planemodel); BuildTrianglesAndAddToVirtualScene(&planemodel);
+    ObjModel quakeMapModel("../../assets/quake-e1m1-the-slipgate-complex/source/e1m1/e1m1.obj");
+    ComputeNormals(&quakeMapModel); 
+    BuildTrianglesAndAddToVirtualScene(&quakeMapModel, "../../assets/quake-e1m1-the-slipgate-complex/source/e1m1/");
 
     TextRendering_Init();
     glEnable(GL_DEPTH_TEST);
@@ -482,13 +540,12 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-    // --- VARIÁVEIS DE ESTADO DO RECÚO DAS ARMAS ---
     int activeGun = 0;             
     float recoilTimer = 0.0f;      
     float RECOIL_DURATION = 0.25f; 
     float RECOIL_DISTANCE = 0.6f;  
 
-while (!glfwWindowShouldClose(window))
+    while (!glfwWindowShouldClose(window))
     {
         glClearColor(0.05f, 0.05f, 0.05f, 1.0f); 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -499,7 +556,6 @@ while (!glfwWindowShouldClose(window))
         float deltaTime = currentTime - lastTime;
         lastTime = currentTime;
 
-        // VETORES DA CÂMERA DO JOGADOR
         float y = sin(g_CameraPhi);
         float z = cos(g_CameraPhi) * cos(g_CameraTheta);
         float x = cos(g_CameraPhi) * sin(g_CameraTheta);
@@ -509,90 +565,42 @@ while (!glfwWindowShouldClose(window))
         glm::vec4 camera_right_vector = crossproduct(camera_view_vector, camera_up_vector);
         camera_right_vector = camera_right_vector / norm(camera_right_vector); 
 
-        float speed = 4.0f * deltaTime; 
+        float speed = 8.0f * deltaTime; 
         
         if (g_WPressed) g_CameraPosition += camera_view_vector * speed;
         if (g_SPressed) g_CameraPosition -= camera_view_vector * speed;
         if (g_APressed) g_CameraPosition -= camera_right_vector * speed;
         if (g_DPressed) g_CameraPosition += camera_right_vector * speed;
-        
-        g_CameraPosition.y = 1.0f; 
 
-        // MATRIZ VIEW DO MUNDO 
         glm::mat4 viewMundo = Matrix_Camera_View(g_CameraPosition, camera_view_vector, camera_up_vector);
 
         glm::mat4 projection;
         float nearplane = -0.1f;  
-        float farplane  = -100.0f;
+        float farplane  = -500.0f; // Bem maior para não cortar o mapa do Quake
         float field_of_view = 3.141592 / 3.0f;
         projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
 
         glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(viewMundo));
         glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
 
-        glm::mat4 model = Matrix_Identity();
-
-        // CHÃO
-        model = Matrix_Translate(MAP_SIZE, 0.0f, MAP_SIZE) * Matrix_Scale(MAP_SIZE*2, 1.0f, MAP_SIZE*2);
+        // --- DESENHANDO O MAPA DO QUAKE ---
+        glm::mat4 model = Matrix_Translate(0.0f, 0.0f, 0.0f) * Matrix_Scale(g_MapScale, g_MapScale, g_MapScale);
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, FLOOR);
-        DrawModel(&planemodel);
-        
-        // TETO
-        model = Matrix_Translate(MAP_SIZE, 2.0f, MAP_SIZE) * Matrix_Rotate_Z(3.141592f) * Matrix_Scale(MAP_SIZE*2, 1.0f, MAP_SIZE*2);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, FLOOR);
-        DrawModel(&planemodel);
+        glUniform1i(g_object_id_uniform, WALL); 
+        DrawModel(&quakeMapModel);
 
-        // --- DESENHANDO O MAPA SEM Z-FIGHTING (USANDO PLANOS) ---
-        float blockSize = 2.0f; 
-        for (int z = 0; z < MAP_SIZE; ++z) {
-            for (int x = 0; x < MAP_SIZE; ++x) {
-                int cell = gameMap[z][x];
-                if (cell == 0) continue; 
-
-                float posX = x * blockSize;
-                float posZ = z * blockSize;
-
-                if (cell == WALL) {
-                    // Ao invés de instanciar um cubo inteiro que brilha e se sobrepõe,
-                    // vamos "construir" as 4 paredes do bloco levantando o plano do chão
-                    // como se fosse papelão. Isso acaba 100% com o Z-fighting interior.
-
-                    glUniform1i(g_object_id_uniform, WALL);
-
-                    // Parede Frontal (Fica no Z - 1.0, virada pra câmera)
-                    model = Matrix_Translate(posX, 1.0f, posZ - 1.0f) * Matrix_Rotate_X(1.5708f) * Matrix_Scale(1.0f, 1.0f, 1.0f);
-                    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                    DrawModel(&planemodel);
-
-                    // Parede Traseira
-                    model = Matrix_Translate(posX, 1.0f, posZ + 1.0f) * Matrix_Rotate_X(-1.5708f) * Matrix_Scale(1.0f, 1.0f, 1.0f);
-                    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                    DrawModel(&planemodel);
-
-                    // Parede Esquerda
-                    model = Matrix_Translate(posX - 1.0f, 1.0f, posZ) * Matrix_Rotate_Z(-1.5708f) * Matrix_Scale(1.0f, 1.0f, 1.0f);
-                    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                    DrawModel(&planemodel);
-
-                    // Parede Direita
-                    model = Matrix_Translate(posX + 1.0f, 1.0f, posZ) * Matrix_Rotate_Z(1.5708f) * Matrix_Scale(1.0f, 1.0f, 1.0f);
-                    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                    DrawModel(&planemodel);
-                }
-                else if (cell == ALIEN) {
-                    model = Matrix_Translate(posX, 0.65f, posZ) * Matrix_Scale(0.5f, 0.5f, 0.5f); 
-                    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                    glUniform1i(g_object_id_uniform, ALIEN);
-                    DrawModel(&alienModel); 
-                }
-                else if (cell == BOX) {
-                    model = Matrix_Translate(posX, 0.25f, posZ) * Matrix_Scale(0.5f, 0.5f, 0.5f);
-                    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                    glUniform1i(g_object_id_uniform, BOX);
-                    DrawModel(&boxModel);
-                }
+        // --- DESENHANDO INIMIGOS E CAIXAS PELAS COORDENADAS ---
+        for (const auto& ent : mapEntities) {
+            model = Matrix_Translate(ent.x, ent.y, ent.z) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            
+            if (ent.type == ALIEN) {
+                glUniform1i(g_object_id_uniform, ALIEN);
+                DrawModel(&alienModel); 
+            }
+            else if (ent.type == BOX) {
+                glUniform1i(g_object_id_uniform, BOX);
+                DrawModel(&boxModel);
             }
         }
 
@@ -639,14 +647,12 @@ while (!glfwWindowShouldClose(window))
         
         glDisable(GL_DEPTH_TEST);
 
-        // --- ARMA ESQUERDA ---
         glm::mat4 gunAlignL = Matrix_Rotate_Y(3.141592f + 0.01f) * Matrix_Rotate_X(inclinacaoParaCima); 
         model = Matrix_Translate(-0.4f, -2.0f, -2.0f + recoilOffsetL) * gunAlignL * gunScale;
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, GUN);
         DrawModel(&gunModel);
 
-        // --- ARMA DIREITA ---
         glm::mat4 gunAlignR = Matrix_Rotate_Y(3.141592f - 0.01f) * Matrix_Rotate_X(inclinacaoParaCima); 
         model = Matrix_Translate(0.4f, -2.0f, -2.0f + recoilOffsetR) * gunAlignR * gunScale;
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
@@ -660,7 +666,6 @@ while (!glfwWindowShouldClose(window))
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-    
 
     glfwTerminate();
     return 0;
