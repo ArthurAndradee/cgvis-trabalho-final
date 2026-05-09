@@ -35,20 +35,6 @@
 #define GUN   4
 #define FLOOR 5
 
-const int MAP_SIZE = 10;
-int gameMap[MAP_SIZE][MAP_SIZE] = {
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 2, 0, 0, 0, 3, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 2, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 3, 0, 0, 0, 2, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-};
-
 struct ObjModel {
     tinyobj::attrib_t                 attrib;
     std::vector<tinyobj::shape_t>     shapes;
@@ -103,32 +89,41 @@ float g_CameraTheta = 0.0f;
 float g_CameraPhi = 0.0f;   
 float g_CameraDistance = 3.5f; 
 
-// --- CONFIGURAÇÕES DO QUACK ---
-// 1. Escala do Mapa (Aumentada para o mapa ficar bem maior)
-float g_MapScale = 0.50f; 
+// ============================================================================
+// CONFIGURAÇÕES DA FASE (Mude os valores aqui para montar seu nível)
+// ============================================================================
 
-// 2. Spawn inicial do Jogador (Ajuste X, Y e Z para nascer onde quiser)
-glm::vec4 g_CameraPosition = glm::vec4(0.0f, 2.0f, 5.0f, 1.0f);
+// 1. Escala Global do Mapa Quake
+float g_MapScale = 1.0f; 
+
+// 2. Spawn inicial do Jogador (Ajuste X, Y e Z)
+glm::vec4 g_CameraPosition = glm::vec4(0.0f, 5.0f, 5.0f, 1.0f);
 
 // 3. Sistema de Spawn Exato para Itens e Inimigos
 struct EntitySpawn {
-    int type;
-    float x, y, z;
-    float scale;
+    int type;      // ALIEN ou BOX
+    float x, y, z; // Posição Exata no Mundo
+    float scale;   // Tamanho da entidade
 };
 
 // Adicione quantos elementos quiser na posição exata que desejar
 std::vector<EntitySpawn> mapEntities = {
-    { ALIEN,  10.0f,  0.0f, -5.0f,  0.5f },
-    { ALIEN, -15.0f,  0.0f,  8.0f,  0.5f },
-    { BOX,     5.0f,  0.25f, 2.0f,  0.5f },
-    { BOX,    -2.0f,  0.25f, 12.0f, 0.5f }
+    // TIPO    X        Y       Z        ESCALA
+    { ALIEN,  10.0f,   0.0f,  -5.0f,   0.5f },
+    { ALIEN, -15.0f,   0.0f,   8.0f,   0.5f },
+    { BOX,     5.0f,   0.25f,  2.0f,   0.5f },
+    { BOX,    -2.0f,   0.25f, 12.0f,   0.5f }
 };
+// ============================================================================
 
+// Variáveis FPS
 bool g_WPressed = false;
 bool g_APressed = false;
 bool g_SPressed = false;
 bool g_DPressed = false;
+bool g_SpacePressed = false; // Subir
+bool g_ShiftPressed = false; // Descer
+
 float g_ForearmAngleZ = 0.0f;
 float g_ForearmAngleX = 0.0f;
 float g_TorsoPositionX = 0.0f;
@@ -185,19 +180,25 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_O && action == GLFW_PRESS) g_UsePerspectiveProjection = false;
     if (key == GLFW_KEY_H && action == GLFW_PRESS) g_ShowInfoText = !g_ShowInfoText;
     
+    // Controles de Free Camera
     if (key == GLFW_KEY_W) g_WPressed = (action != GLFW_RELEASE);
     if (key == GLFW_KEY_S) g_SPressed = (action != GLFW_RELEASE);
     if (key == GLFW_KEY_A) g_APressed = (action != GLFW_RELEASE);
     if (key == GLFW_KEY_D) g_DPressed = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_SPACE) g_SpacePressed = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_LEFT_SHIFT) g_ShiftPressed = (action != GLFW_RELEASE);
+
+    // Resets de ângulo (Mudei de Space para Enter para liberar o voo no Space)
+    if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
+        g_AngleX = 0.0f; g_AngleY = 0.0f; g_AngleZ = 0.0f;
+    }
 }
 
 void PushMatrix(glm::mat4 M); 
 void PopMatrix(glm::mat4& M); 
-// CORRIGIDO: Adicionado o basepath para ler o .mtl corretamente
 void BuildTrianglesAndAddToVirtualScene(ObjModel* model, const char* basepath = NULL); 
 void ComputeNormals(ObjModel* model); 
 void LoadShadersFromFiles(); 
-// CORRIGIDO: A função agora retorna GLuint na declaração para bater com a implementação!
 GLuint LoadTextureImage(const char* filename); 
 void DrawVirtualObject(const char* object_name); 
 GLuint LoadShader_Vertex(const char* filename);   
@@ -223,7 +224,6 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height) {
 }
 
 GLuint LoadTextureImage(const char* filename) {
-    // Se a textura já foi carregada antes, devolvemos ela da memória!
     if (g_TextureCache.find(filename) != g_TextureCache.end()) 
         return g_TextureCache[filename];
 
@@ -234,7 +234,7 @@ GLuint LoadTextureImage(const char* filename) {
     
     if ( data == NULL ) { 
         printf("AVISO: Imagem nao encontrada. O objeto ficara sem textura.\n"); 
-        return 0; // Se não achar a imagem, retorna 0 (evita crash do jogo)
+        return 0; 
     }
     printf("OK (%dx%d).\n", width, height);
 
@@ -255,22 +255,19 @@ GLuint LoadTextureImage(const char* filename) {
     glGenerateMipmap(GL_TEXTURE_2D);
     stbi_image_free(data);
     
-    g_TextureCache[filename] = texture_id; // Salva no cache
+    g_TextureCache[filename] = texture_id; 
     return texture_id;
 }
 
 void DrawVirtualObject(const char* object_name) {
     if (g_VirtualScene.find(object_name) == g_VirtualScene.end()) return; 
 
-    // --- MAGIA ACONTECENDO AQUI ---
-    // Resgatamos a textura exata salva para este pedaço do modelo 3D
     GLuint tex_id = g_VirtualScene[object_name].texture_id;
-    if (tex_id == 0) tex_id = g_DefaultTexture; // Usa a textura padrão se der erro
+    if (tex_id == 0) tex_id = g_DefaultTexture; 
     
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex_id);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage"), 0);
-    // ------------------------------
 
     glBindVertexArray(g_VirtualScene[object_name].vertex_array_object_id);
     glm::vec3 bbox_min = g_VirtualScene[object_name].bbox_min;
@@ -393,7 +390,6 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model, const char* basepath) {
         size_t last_index = indices.size() - 1;
         std::string unique_name = model->shapes[shape].name + "_" + std::to_string(shape);
 
-        // --- LÊ O ARQUIVO DE MATERIAL E CARREGA A IMAGEM CORRETA DA PASTA ---
         GLuint shape_texture_id = 0;
         if (basepath != NULL && !model->materials.empty() && !model->shapes[shape].mesh.material_ids.empty()) {
             int mat_id = model->shapes[shape].mesh.material_ids[0];
@@ -414,7 +410,7 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model, const char* basepath) {
         theobject.vertex_array_object_id = vertex_array_object_id;
         theobject.bbox_min = bbox_min;
         theobject.bbox_max = bbox_max;
-        theobject.texture_id = shape_texture_id; // Salva a textura do Quake!
+        theobject.texture_id = shape_texture_id; 
         
         g_VirtualScene[unique_name] = theobject;
     }
@@ -486,8 +482,7 @@ void TextRendering_ShowFramesPerSecond(GLFWwindow* window) {
 }
 
 // ============================================================================
-// PARTE 3: MAIN E LÓGICA DO JOGO
-// TUDO ACIMA DESTA LINHA NÃO PRECISA MAIS SER ALTERADO!
+// PARTE PRINCIPAL (MAIN)
 // ============================================================================
 int main(int argc, char* argv[])
 {
@@ -514,10 +509,8 @@ int main(int argc, char* argv[])
 
     LoadShadersFromFiles();
 
-    // Carregamos a textura de tijolos como um fallback padrão
     g_DefaultTexture = LoadTextureImage("../../data/red_brick_diff_1k.jpg");
 
-    // Modelos (Repare no segundo parâmetro apontando para a pasta das texturas)
     ObjModel alienModel("../../assets/alien_obj/VG59BZPNHSI70DYK7XZUK7B4F.obj");
     ComputeNormals(&alienModel); 
     BuildTrianglesAndAddToVirtualScene(&alienModel, "../../assets/alien_obj/");
@@ -571,39 +564,94 @@ int main(int argc, char* argv[])
         if (g_SPressed) g_CameraPosition -= camera_view_vector * speed;
         if (g_APressed) g_CameraPosition -= camera_right_vector * speed;
         if (g_DPressed) g_CameraPosition += camera_right_vector * speed;
+        
+        // --- Controles de Free Camera adicionados (Espaço e Shift) ---
+        if (g_SpacePressed) g_CameraPosition += camera_up_vector * speed;
+        if (g_ShiftPressed) g_CameraPosition -= camera_up_vector * speed;
+        // -------------------------------------------------------------
 
         glm::mat4 viewMundo = Matrix_Camera_View(g_CameraPosition, camera_view_vector, camera_up_vector);
 
         glm::mat4 projection;
         float nearplane = -0.1f;  
-        float farplane  = -500.0f; // Bem maior para não cortar o mapa do Quake
+        float farplane  = -500.0f; 
         float field_of_view = 3.141592 / 3.0f;
         projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
 
         glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(viewMundo));
         glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
 
+        glm::mat4 model = Matrix_Identity();
+
         // --- DESENHANDO O MAPA DO QUAKE ---
-        glm::mat4 model = Matrix_Translate(0.0f, 0.0f, 0.0f) * Matrix_Scale(g_MapScale, g_MapScale, g_MapScale);
+        model = Matrix_Translate(0.0f, 0.0f, 0.0f) * Matrix_Scale(g_MapScale, g_MapScale, g_MapScale);
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, WALL); 
         DrawModel(&quakeMapModel);
 
         // --- DESENHANDO INIMIGOS E CAIXAS PELAS COORDENADAS ---
-        for (const auto& ent : mapEntities) {
-            model = Matrix_Translate(ent.x, ent.y, ent.z) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
-            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+// --- DESENHANDO INIMIGOS E CAIXAS PELAS COORDENADAS ---
+        // O "auto&" (referência) permite atualizar as posições permanentemente no vetor
+        for (auto& ent : mapEntities) {
             
-            if (ent.type == ALIEN) {
+if (ent.type == ALIEN) {
+                // 1. Calcula o vetor que aponta do Inimigo para o Jogador
+                float dirX = g_CameraPosition.x - ent.x;
+                float dirZ = g_CameraPosition.z - ent.z;
+                
+                // 2. Calcula a distância real usando Pitágoras
+                float dist = sqrt(dirX * dirX + dirZ * dirZ);
+                
+                // 3. IA de Movimentação e Animação Procedural
+                float AGGRO_DISTANCE = 50.0f; // Raio de visão do alien (50 metros)
+                float ENEMY_SPEED = 3.0f;     // Velocidade de perseguição
+                
+                float alienBobbingY = 0.0f;   // Pulo da caminhada
+                float alienWobbleZ = 0.0f;    // Gingado lateral
+
+                // Se o jogador estiver na área e não estiver exatamente colado no inimigo
+                if (dist > 0.5f && dist < AGGRO_DISTANCE) {
+                    // Normaliza o vetor direção
+                    dirX /= dist;
+                    dirZ /= dist;
+                    
+                    // Atualiza a posição do alien na memória
+                    ent.x += dirX * ENEMY_SPEED * deltaTime;
+                    ent.z += dirZ * ENEMY_SPEED * deltaTime;
+
+                    // --- ANIMAÇÃO DE CORRIDA PROCEDURAL ---
+                    float runAnimSpeed = 15.0f; // Quão rápido ele bate o pé no chão
+                    
+                    // O abs(sin) faz ele dar "pulos" apenas para cima, simulando o impacto do pé
+                    alienBobbingY = abs(sin(currentTime * runAnimSpeed)) * 0.15f; 
+                    
+                    // O cos() puro faz ele tombar de um lado para o outro alternadamente
+                    alienWobbleZ = cos(currentTime * runAnimSpeed * 0.5f) * 0.15f; 
+                }
+                
+                // 4. Calcula o ângulo para o modelo 3D sempre "olhar" para o jogador
+                float angle = atan2(dirX, dirZ);
+                float alienOrientationOffset = 1.5708f; // Mude para 3.14159f se ele andar de costas
+                
+                // 5. Monta a matriz aplicando a translação com o pulo (Y) e a rotação com o gingado (Z)
+                model = Matrix_Translate(ent.x, ent.y + alienBobbingY, ent.z) 
+                      * Matrix_Rotate_Y(angle + alienOrientationOffset) 
+                      * Matrix_Rotate_Z(alienWobbleZ)
+                      * Matrix_Scale(ent.scale, ent.scale, ent.scale);
+                      
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                 glUniform1i(g_object_id_uniform, ALIEN);
                 DrawModel(&alienModel); 
             }
             else if (ent.type == BOX) {
+                // A caixa é um objeto inanimado, apenas recebe a translação e escala estáticas
+                model = Matrix_Translate(ent.x, ent.y, ent.z) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                 glUniform1i(g_object_id_uniform, BOX);
                 DrawModel(&boxModel);
             }
         }
-
+        
         // ====================================================================
         // RENDERIZAÇÃO DA ARMA COM ANIMAÇÃO DE RECÚO INTERCALADO
         // ====================================================================

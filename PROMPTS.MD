@@ -7,7 +7,7 @@ Arthur:
 5. Perfeito, vamos usar o alien para inimigos, a caixa como um item, a gun como nossa arma que deve acompanhar a câmera e ser renderizada no "olho" do personagem, mas nada terá interação ainda:
 mapa de cada arquivo:
 PS E:\university\courses\2026-1\computacao-grafica-e-visualizacao\cgvis-trabalho-final\assets> ls -recursive
-6. Como mudar a rotação/direção/altura/escala da arma?
+6. Como mudar a r otação/direção/altura/escala da arma?
 7.  As armas estão perfeitas, apenas mais um detalhe. Faça com que, enquanto o botão esquerdo do mouse esteja sendo segurado: Uma arma, de cada vez, sofra "recúo", com o movimento de recúo sendo uma ida para trás rápida e uma volta para sua posição original lenta, uma arma só se movimenta se a outra terminou: 
 8. E como eu poderia usar um mapa já pronto? como eu poderia encontrar o mapa Quake 1 Demo?
 9. 
