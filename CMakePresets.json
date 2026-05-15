@@ -1,35 +1,42 @@
 {
-  "version": 6,
-  "configurePresets": [
-    {
-      "name": "default-config",
-      "binaryDir": "${sourceDir}/build"
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "default-build",
-      "configurePreset": "default-config"
-    },
-    {
-      "name": "build-run",
-      "configurePreset": "default-config",
-      "targets": ["run"]
-    }
-  ],
-  "workflowPresets": [
-    {
-      "name": "configure-build-run",
-      "steps": [
+    "version": 6,
+    "configurePresets": [
         {
-          "type": "configure",
-          "name": "default-config"
+            "name": "default-config",
+            "binaryDir": "${sourceDir}/build"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "default-build",
+            "configurePreset": "default-config"
         },
         {
-          "type": "build",
-          "name": "build-run"
+            "name": "build-run",
+            "configurePreset": "default-config",
+            "targets": [
+                "run"
+            ]
+        },
+        {
+            "name": "a",
+            "description": "",
+            "displayName": ""
         }
-      ]
-    }
-  ]
+    ],
+    "workflowPresets": [
+        {
+            "name": "configure-build-run",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "default-config"
+                },
+                {
+                    "type": "build",
+                    "name": "build-run"
+                }
+            ]
+        }
+    ]
 }

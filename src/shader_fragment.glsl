@@ -14,6 +14,8 @@ uniform mat4 projection;
 #define BOX   3
 #define GUN   4
 #define FLOOR 5
+#define BULLET 6 // Adicionado o ID do projétil Laser
+
 uniform int object_id;
 
 // AGORA O SHADER SÓ PRECISA DE UM SAMPLER PARA RENDERIZAR TUDO!
@@ -23,6 +25,21 @@ out vec4 color;
 
 void main()
 {
+    // =========================================================
+    // CUSTOMIZAÇÃO DA COR DO LASER
+    // Se for o tiro, pinta da cor desejada e ignora as sombras
+    // =========================================================
+    if (object_id == BULLET) {
+        // Cores em RGB (Vermelho, Verde, Azul, Opacidade). Valores de 0.0 a 1.0
+        // Para Amarelo: Vermelho no máximo (1.0) + Verde no máximo (1.0)
+        color = vec4(1.0, 1.0, 0.0, 1.0); 
+        
+        // Aplica correção gamma mesmo na cor pura para manter o brilho da tela correto
+        color.rgb = pow(color.rgb, vec3(1.0, 1.0, 1.0) / 2.2);
+        return; 
+    }
+    // =========================================================
+
     vec4 origin = vec4(0.0, 0.0, 0.0, 1.0);
     vec4 camera_position = inverse(view) * origin;
     vec4 p = position_world;

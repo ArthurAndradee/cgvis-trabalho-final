@@ -82,7 +82,7 @@ if(WIN32)
       # sempre aparece no output (mesmo quando ucrt64 é a libc utilizada).
       if (COMPILER_VERSION_OUTPUT MATCHES "ucrt64")
         set(LIBGLFW ${PROJECT_SOURCE_DIR}/lib-ucrt-64/libglfw3.a)
-      elseif (COMPILER_VERSION_OUTPUT MATCHES "mingw64")
+      elseif (CMAKE_SIZEOF_VOID_P EQUAL 8)
         set(LIBGLFW ${PROJECT_SOURCE_DIR}/lib-mingw-64/libglfw3.a)
       else()
         set(LIBGLFW ${PROJECT_SOURCE_DIR}/lib-mingw-32/libglfw3.a)
