@@ -10,4 +10,8 @@ PS E:\university\courses\2026-1\computacao-grafica-e-visualizacao\cgvis-trabalho
 6. Como mudar a r otação/direção/altura/escala da arma?
 7.  As armas estão perfeitas, apenas mais um detalhe. Faça com que, enquanto o botão esquerdo do mouse esteja sendo segurado: Uma arma, de cada vez, sofra "recúo", com o movimento de recúo sendo uma ida para trás rápida e uma volta para sua posição original lenta, uma arma só se movimenta se a outra terminou: 
 8. E como eu poderia usar um mapa já pronto? como eu poderia encontrar o mapa Quake 1 Demo?
-9. 
+9. when moving, the player is getting stuck on high ledges, I want to be able to fall down regardless of height
+10. can we make it so that the enemies can also go down small ledges to chase the player and also can go around obstacles instead of just walking in a straight line
+11. fix enemy+enemy collision so that they don't overlap and  can we have some of them standing still and shooting slow moving projectiles (that the player is supposed to be able to doge) instead of chasing
+12. make it visible when enemies are hit like blinking red
+13. can we make the hp hud look somewhat like this (print da hud do exemplo)
