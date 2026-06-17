@@ -102,25 +102,30 @@ float g_MapScale = 0.50f;
 // Localização Exata do Jogador
 glm::vec4 g_CameraPosition = glm::vec4(-2.21f, -2.66f, -9.25f, 1.0f);
 
+// HP do jogador
+int g_PlayerHP = 100;
+const int g_PlayerMaxHP = 100;
+
 struct EntitySpawn {
     int type;
     float x, y, z;
     float scale;
+    float hitCooldown; // segundos restantes ate poder bater no jogador de novo
 };
 
 // Spawns dos Aliens e do Portal (Y Aumentado em +1.0f para caírem de pé)
 std::vector<EntitySpawn> mapEntities = {
-    { ALIEN,   4.27f, -1.16f, -14.56f, 0.5f },
-    { ALIEN,  -0.34f, -1.51f, -21.68f, 0.5f },
-    { ALIEN,   6.66f, -1.72f, -25.10f, 0.5f },
-    { ALIEN,   6.92f, -1.09f, -33.12f, 0.5f },
-    { ALIEN,   5.96f, -0.80f, -30.05f, 0.5f },
-    { ALIEN,  -5.96f, -0.02f, -32.90f, 0.5f },
-    { ALIEN,  -4.86f,  2.45f, -36.45f, 0.5f },
-    { ALIEN,   4.77f,  0.59f, -43.51f, 0.5f },
-    { ALIEN,   4.41f,  0.59f, -44.73f, 0.5f },
-    { ALIEN,   2.10f,  0.49f, -44.06f, 0.5f },
-    { PORTAL,  7.22f,  0.69f, -44.22f, 1.0f } 
+    { ALIEN,   4.27f, -1.16f, -14.56f, 0.5f, 0.0f },
+    { ALIEN,  -0.34f, -1.51f, -21.68f, 0.5f, 0.0f },
+    { ALIEN,   6.66f, -1.72f, -25.10f, 0.5f, 0.0f },
+    { ALIEN,   6.92f, -1.09f, -33.12f, 0.5f, 0.0f },
+    { ALIEN,   5.96f, -0.80f, -30.05f, 0.5f, 0.0f },
+    { ALIEN,  -5.96f, -0.02f, -32.90f, 0.5f, 0.0f },
+    { ALIEN,  -4.86f,  2.45f, -36.45f, 0.5f, 0.0f },
+    { ALIEN,   4.77f,  0.59f, -43.51f, 0.5f, 0.0f },
+    { ALIEN,   4.41f,  0.59f, -44.73f, 0.5f, 0.0f },
+    { ALIEN,   2.10f,  0.49f, -44.06f, 0.5f, 0.0f },
+    { PORTAL,  7.22f,  0.69f, -44.22f, 1.0f, 0.0f }
 };
 
 // --- ESTRUTURA E ARMAZENAMENTO DO PROJÉTIL (BEZIER) ---
@@ -647,8 +652,10 @@ int main(int argc, char* argv[])
     float playerVelocityY = 0.0f;
     const float GRAVITY = -15.0f;
     const float JUMP_FORCE = 6.0f;
-    const float PLAYER_HEIGHT = 1.2f; 
-    const float PLAYER_RADIUS = 0.3f; 
+    const float PLAYER_HEIGHT = 1.2f;
+    const float PLAYER_RADIUS = 0.3f;
+    const float STEP_HEIGHT  = 0.55f; // Degraus/bumps menores que isso são auto-galgados
+    float cameraYSmooth = 0.0f;       // Offset visual decaindo para suavizar subidas
 
     while (!glfwWindowShouldClose(window))
     {
@@ -685,28 +692,98 @@ int main(int argc, char* argv[])
         if (g_APressed) nextPos -= right_walk * speed;
         if (g_DPressed) nextPos += right_walk * speed;
 
-        // FÍSICA 1: Colisão RÁPIDA com as paredes do mapa
-        if (!CheckWallCollision(nextPos.x, nextPos.y - PLAYER_HEIGHT, nextPos.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-            !CheckEntityCollision(nextPos, PLAYER_RADIUS, PLAYER_HEIGHT)) {
-            g_CameraPosition.x = nextPos.x;
-            g_CameraPosition.z = nextPos.z;
+        // FÍSICA 1: Colisão com paredes (com step-up estilo Quake)
+        // Tenta o movimento normal. Se bloqueado, tenta de novo com os pés erguidos
+        // STEP_HEIGHT — assim degraus e bumps pequenos são galgados sem pular.
+        glm::vec3 nextPosFlat = nextPos;
+        bool wasGrounded = (playerVelocityY == 0.0f); // estado pré-gravidade deste frame
+        bool moved = false;
+
+        // Anti-out-of-bounds: se estamos no chão, recusa qualquer XZ que não tenha
+        // chão em lugar algum debaixo (ResolveFloorHeight devolve -9999 nesse caso).
+        // No ar, deixa passar (queda livre legítima).
+        auto destHasFloor = [&](float x, float z) -> bool {
+            if (!wasGrounded) return true;
+            float fy = ResolveFloorHeight(x, g_CameraPosition.y, z);
+            return fy > -9000.0f;
+        };
+
+        if (destHasFloor(nextPosFlat.x, nextPosFlat.z) &&
+            !CheckWallCollision(nextPosFlat.x, nextPosFlat.y - PLAYER_HEIGHT, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
+            !CheckEntityCollision(nextPosFlat, PLAYER_RADIUS, PLAYER_HEIGHT)) {
+            g_CameraPosition.x = nextPosFlat.x;
+            g_CameraPosition.z = nextPosFlat.z;
+            moved = true;
+        } else if (playerVelocityY <= 0.01f) {
+            // No chão (ou caindo): tenta step-up / step-off
+            float raisedFootY = (g_CameraPosition.y - PLAYER_HEIGHT) + STEP_HEIGHT;
+            if (destHasFloor(nextPosFlat.x, nextPosFlat.z) &&
+                !CheckWallCollision(nextPosFlat.x, raisedFootY, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT) &&
+                !CheckEntityCollision(glm::vec3(nextPosFlat.x, g_CameraPosition.y + STEP_HEIGHT, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT)) {
+                // Erguer os pés desbloqueia: passa por cima do bumper.
+                // Se há um chão no alcance do passo, sobe; senão, anda mesmo assim
+                // e deixa a gravidade puxar (caída de qualquer altura).
+                float candidateFloor = ResolveFloorHeight(nextPosFlat.x, raisedFootY, nextPosFlat.z);
+                float currentFoot = g_CameraPosition.y - PLAYER_HEIGHT;
+                float climb = candidateFloor - currentFoot;
+
+                g_CameraPosition.x = nextPosFlat.x;
+                g_CameraPosition.z = nextPosFlat.z;
+                if (climb > 0.0f && climb <= STEP_HEIGHT + 0.01f) {
+                    g_CameraPosition.y += climb;     // Sobe para o degrau imediatamente
+                    cameraYSmooth -= climb;          // ...mas a câmera "lembra" para deslizar
+                    playerVelocityY = 0.0f;
+                }
+                // Se climb < 0 (beira de penhasco) ou candidateFloor inválido,
+                // não mexe no Y — gravidade trata da queda no próximo bloco.
+                moved = true;
+            }
         }
+        (void)moved;
 
         // FÍSICA 2: Gravidade e Chão Otimizados
         float floorY = ResolveFloorHeight(g_CameraPosition.x, g_CameraPosition.y - PLAYER_HEIGHT, g_CameraPosition.z);
-        
-        playerVelocityY += GRAVITY * deltaTime;
-        float nextFootY = (g_CameraPosition.y + playerVelocityY * deltaTime) - PLAYER_HEIGHT;
 
-        if (nextFootY <= floorY) { 
+        // STEP-DOWN: se estava no chão e o piso "fugiu" para baixo (degrau descendo),
+        // gruda no novo chão em vez de virar pulo. Só vale para descidas pequenas.
+        float footNow = g_CameraPosition.y - PLAYER_HEIGHT;
+        float dropToFloor = footNow - floorY;
+        if (wasGrounded && !g_SpacePressed && dropToFloor > 0.02f && dropToFloor <= STEP_HEIGHT + 0.05f) {
+            cameraYSmooth += dropToFloor;        // Câmera fica "alta" e desce suave
             g_CameraPosition.y = floorY + PLAYER_HEIGHT;
             playerVelocityY = 0.0f;
-            if (g_SpacePressed) playerVelocityY = JUMP_FORCE; 
+            if (g_SpacePressed) playerVelocityY = JUMP_FORCE;
         } else {
-            g_CameraPosition.y += playerVelocityY * deltaTime; 
+            playerVelocityY += GRAVITY * deltaTime;
+            float nextFootY = (g_CameraPosition.y + playerVelocityY * deltaTime) - PLAYER_HEIGHT;
+
+            if (nextFootY <= floorY) {
+                float prevFoot = g_CameraPosition.y - PLAYER_HEIGHT;
+                float snap = floorY - prevFoot;
+                // Se o chão subiu (rampa/degrau pequeno), suaviza visualmente
+                if (snap > 0.02f && snap <= STEP_HEIGHT + 0.05f) {
+                    cameraYSmooth -= snap;
+                }
+                g_CameraPosition.y = floorY + PLAYER_HEIGHT;
+                playerVelocityY = 0.0f;
+                if (g_SpacePressed) playerVelocityY = JUMP_FORCE;
+            } else {
+                g_CameraPosition.y += playerVelocityY * deltaTime;
+            }
         }
 
-        glm::mat4 viewMundo = Matrix_Camera_View(g_CameraPosition, camera_view_vector, camera_up_vector);
+        // Decai o offset suave da câmera (em ~0.15s chega perto de zero)
+        if (cameraYSmooth != 0.0f) {
+            float decayPerSec = 8.0f; // maior = mais rápido
+            float factor = expf(-decayPerSec * deltaTime);
+            cameraYSmooth *= factor;
+            if (fabsf(cameraYSmooth) < 0.001f) cameraYSmooth = 0.0f;
+        }
+
+        glm::vec4 cameraEye = g_CameraPosition;
+        cameraEye.y += cameraYSmooth;
+
+        glm::mat4 viewMundo = Matrix_Camera_View(cameraEye, camera_view_vector, camera_up_vector);
         glm::mat4 projection = Matrix_Perspective(3.141592 / 3.0f, g_ScreenRatio, -0.1f, -500.0f);
 
         glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(viewMundo));
@@ -741,25 +818,69 @@ int main(int argc, char* argv[])
                 float dirX = g_CameraPosition.x - ent.x;
                 float dirZ = g_CameraPosition.z - ent.z;
                 float dist = sqrt(dirX * dirX + dirZ * dirZ);
-                
-                float AGGRO_DISTANCE = 50.0f; 
-                float ENEMY_SPEED = 3.0f;     
-                float alienBobbingY = 0.0f;   
-                float alienWobbleZ = 0.0f;    
 
-                if (dist < AGGRO_DISTANCE) {
-                    dirX /= dist; dirZ /= dist;
-                    float nX = ent.x + dirX * ENEMY_SPEED * deltaTime;
-                    float nZ = ent.z + dirZ * ENEMY_SPEED * deltaTime;
-                    
-                    if (!CheckWallCollision(nX, ent.y, nZ, 0.3f, 1.0f)) {
-                        ent.x = nX;
-                        ent.z = nZ;
+                float AGGRO_DISTANCE = 50.0f;
+                float ENEMY_SPEED = 3.0f;
+                float MELEE_RANGE = 1.0f;     // Distância para bater no jogador
+                float BOUNCE_DIST = 1.5f;     // Quão longe o alien é empurrado
+                float PLAYER_KNOCKBACK = 0.8f;// Quão longe o jogador é empurrado
+                int   ALIEN_DAMAGE = 10;      // Dano por colisão
+                float HIT_COOLDOWN = 1.0f;    // Segundos entre golpes do mesmo alien
+                float alienBobbingY = 0.0f;
+                float alienWobbleZ = 0.0f;
+
+                if (ent.hitCooldown > 0.0f) {
+                    ent.hitCooldown -= deltaTime;
+                    if (ent.hitCooldown < 0.0f) ent.hitCooldown = 0.0f;
+                }
+
+                if (dist < AGGRO_DISTANCE && dist > 0.0001f) {
+                    float ndirX = dirX / dist;
+                    float ndirZ = dirZ / dist;
+
+                    // Só avança se ainda não está no alcance corpo a corpo
+                    if (dist > MELEE_RANGE) {
+                        float nX = ent.x + ndirX * ENEMY_SPEED * deltaTime;
+                        float nZ = ent.z + ndirZ * ENEMY_SPEED * deltaTime;
+
+                        if (!CheckWallCollision(nX, ent.y, nZ, 0.3f, 1.0f)) {
+                            ent.x = nX;
+                            ent.z = nZ;
+                        }
                     }
 
-                    float runAnimSpeed = 15.0f; 
-                    alienBobbingY = abs(sin(currentTime * runAnimSpeed)) * 0.15f; 
-                    alienWobbleZ = cos(currentTime * runAnimSpeed * 0.5f) * 0.15f; 
+                    // BATIDA: aplica knockback nos dois e dano no jogador
+                    if (dist <= MELEE_RANGE && ent.hitCooldown == 0.0f) {
+                        if (g_PlayerHP > 0) {
+                            g_PlayerHP -= ALIEN_DAMAGE;
+                            if (g_PlayerHP < 0) g_PlayerHP = 0;
+                        }
+                        ent.hitCooldown = HIT_COOLDOWN;
+
+                        // Empurra alien para trás (sentido oposto ao jogador)
+                        float bX = ent.x - ndirX * BOUNCE_DIST;
+                        float bZ = ent.z - ndirZ * BOUNCE_DIST;
+                        if (!CheckWallCollision(bX, ent.y, bZ, 0.3f, 1.0f)) {
+                            ent.x = bX;
+                            ent.z = bZ;
+                        }
+
+                        // Empurra jogador para trás também
+                        glm::vec3 pushPos = glm::vec3(
+                            g_CameraPosition.x + ndirX * PLAYER_KNOCKBACK,
+                            g_CameraPosition.y,
+                            g_CameraPosition.z + ndirZ * PLAYER_KNOCKBACK
+                        );
+                        if (!CheckWallCollision(pushPos.x, pushPos.y - PLAYER_HEIGHT, pushPos.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
+                            !CheckEntityCollision(pushPos, PLAYER_RADIUS, PLAYER_HEIGHT)) {
+                            g_CameraPosition.x = pushPos.x;
+                            g_CameraPosition.z = pushPos.z;
+                        }
+                    }
+
+                    float runAnimSpeed = 15.0f;
+                    alienBobbingY = abs(sin(currentTime * runAnimSpeed)) * 0.15f;
+                    alienWobbleZ = cos(currentTime * runAnimSpeed * 0.5f) * 0.15f;
                 }
                 
                 float angle = atan2(dirX, dirZ);
@@ -857,6 +978,18 @@ int main(int argc, char* argv[])
 
         glEnable(GL_DEPTH_TEST);
         TextRendering_ShowFramesPerSecond(window);
+
+        // HUD: HP do jogador (canto inferior esquerdo)
+        {
+            char hpBuffer[64];
+            snprintf(hpBuffer, sizeof(hpBuffer), "HP: %d / %d", g_PlayerHP, g_PlayerMaxHP);
+            float lineHeight = TextRendering_LineHeight(window);
+            TextRendering_PrintString(window, hpBuffer, -1.0f + TextRendering_CharWidth(window), -1.0f + lineHeight, 1.5f);
+            if (g_PlayerHP <= 0) {
+                TextRendering_PrintString(window, "YOU DIED", -0.15f, 0.05f, 2.0f);
+            }
+        }
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
