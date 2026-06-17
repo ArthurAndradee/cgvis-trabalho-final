@@ -106,35 +106,52 @@ glm::vec4 g_CameraPosition = glm::vec4(-2.21f, -2.66f, -9.25f, 1.0f);
 int g_PlayerHP = 100;
 const int g_PlayerMaxHP = 100;
 
+// Comportamento dos aliens
+#define ALIEN_CHASER  0
+#define ALIEN_SHOOTER 1
+
 struct EntitySpawn {
     int type;
     float x, y, z;
     float scale;
     float hitCooldown; // segundos restantes ate poder bater no jogador de novo
+    int   behavior;    // ALIEN_CHASER ou ALIEN_SHOOTER (ignorado para nao-aliens)
+    float shootCooldown; // segundos ate poder atirar de novo (apenas SHOOTER)
+    int   hp;           // pontos de vida (apenas aliens)
+    float hitFlash;     // segundos de pisca-pisca vermelho restantes
 };
 
 // Spawns dos Aliens e do Portal (Y Aumentado em +1.0f para caírem de pé)
 std::vector<EntitySpawn> mapEntities = {
-    { ALIEN,   4.27f, -1.16f, -14.56f, 0.5f, 0.0f },
-    { ALIEN,  -0.34f, -1.51f, -21.68f, 0.5f, 0.0f },
-    { ALIEN,   6.66f, -1.72f, -25.10f, 0.5f, 0.0f },
-    { ALIEN,   6.92f, -1.09f, -33.12f, 0.5f, 0.0f },
-    { ALIEN,   5.96f, -0.80f, -30.05f, 0.5f, 0.0f },
-    { ALIEN,  -5.96f, -0.02f, -32.90f, 0.5f, 0.0f },
-    { ALIEN,  -4.86f,  2.45f, -36.45f, 0.5f, 0.0f },
-    { ALIEN,   4.77f,  0.59f, -43.51f, 0.5f, 0.0f },
-    { ALIEN,   4.41f,  0.59f, -44.73f, 0.5f, 0.0f },
-    { ALIEN,   2.10f,  0.49f, -44.06f, 0.5f, 0.0f },
-    { PORTAL,  7.22f,  0.69f, -44.22f, 1.0f, 0.0f }
+    { ALIEN,   4.27f, -1.16f, -14.56f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,  -0.34f, -1.51f, -21.68f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.0f, 3, 0.0f },
+    { ALIEN,   6.66f, -1.72f, -25.10f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   6.92f, -1.09f, -33.12f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.5f, 3, 0.0f },
+    { ALIEN,   5.96f, -0.80f, -30.05f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,  -5.96f, -0.02f, -32.90f, 0.5f, 0.0f, ALIEN_SHOOTER, 2.0f, 3, 0.0f },
+    { ALIEN,  -4.86f,  2.45f, -36.45f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   4.77f,  0.59f, -43.51f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.2f, 3, 0.0f },
+    { ALIEN,   4.41f,  0.59f, -44.73f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   2.10f,  0.49f, -44.06f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { PORTAL,  7.22f,  0.69f, -44.22f, 1.0f, 0.0f, 0,             0.0f, 0, 0.0f }
 };
 
 // --- ESTRUTURA E ARMAZENAMENTO DO PROJÉTIL (BEZIER) ---
 struct Projectile {
     bool active;
-    float t; 
-    glm::vec4 p0, p1, p2, p3; 
+    float t;
+    glm::vec4 p0, p1, p2, p3;
 };
 std::vector<Projectile> g_Projectiles;
+
+// Projeteis dos inimigos (movimento linear lento)
+struct EnemyProjectile {
+    bool active;
+    glm::vec3 pos;
+    glm::vec3 vel;
+    float life; // segundos restantes antes de sumir
+};
+std::vector<EnemyProjectile> g_EnemyProjectiles;
 // ------------------------------------------------------
 
 bool g_WPressed = false;
@@ -152,7 +169,7 @@ float g_TorsoPositionY = 0.0f;
 bool g_UsePerspectiveProjection = true;
 bool g_ShowInfoText = true;
 GLuint g_GpuProgramID = 0;
-GLint g_model_uniform, g_view_uniform, g_projection_uniform, g_object_id_uniform, g_bbox_min_uniform, g_bbox_max_uniform;
+GLint g_model_uniform, g_view_uniform, g_projection_uniform, g_object_id_uniform, g_bbox_min_uniform, g_bbox_max_uniform, g_hit_flash_uniform;
 GLuint g_NumLoadedTextures = 0;
 
 std::string nomeAlien;
@@ -233,7 +250,88 @@ void TextRendering_Init();
 float TextRendering_LineHeight(GLFWwindow* window);
 float TextRendering_CharWidth(GLFWwindow* window);
 void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float x, float y, float scale = 1.0f);
+void TextRendering_SetColor(float r, float g, float b);
 void TextRendering_ShowFramesPerSecond(GLFWwindow* window);
+
+// ============================================================================
+// HUD: shapes 2D coloridas (barras, ícones)
+// ============================================================================
+static GLuint g_HUDProgramID = 0;
+static GLuint g_HUDVAO = 0, g_HUDVBO = 0;
+static GLint  g_HUDColorLoc = -1;
+
+static const char* HUD_VS = "#version 330\nlayout(location=0) in vec2 p;\nvoid main(){ gl_Position = vec4(p, 0.0, 1.0); }\n";
+static const char* HUD_FS = "#version 330\nuniform vec4 color;\nout vec4 fc;\nvoid main(){ fc = color; }\n";
+
+void HUD_Init() {
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vs, 1, &HUD_VS, NULL); glCompileShader(vs);
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fs, 1, &HUD_FS, NULL); glCompileShader(fs);
+    g_HUDProgramID = glCreateProgram();
+    glAttachShader(g_HUDProgramID, vs); glAttachShader(g_HUDProgramID, fs);
+    glLinkProgram(g_HUDProgramID);
+    glDeleteShader(vs); glDeleteShader(fs);
+    g_HUDColorLoc = glGetUniformLocation(g_HUDProgramID, "color");
+
+    glGenVertexArrays(1, &g_HUDVAO);
+    glGenBuffers(1, &g_HUDVBO);
+    glBindVertexArray(g_HUDVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, g_HUDVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 256, NULL, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+}
+
+// x,y,w,h em coordenadas NDC (-1..1).
+void HUD_DrawRect(float x, float y, float w, float h, float r, float g, float b, float a) {
+    float v[12] = {
+        x,     y,
+        x + w, y,
+        x + w, y + h,
+        x,     y,
+        x + w, y + h,
+        x,     y + h,
+    };
+    glUseProgram(g_HUDProgramID);
+    glUniform4f(g_HUDColorLoc, r, g, b, a);
+    glBindVertexArray(g_HUDVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, g_HUDVBO);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(v), v);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+}
+
+// Coração desenhado com retângulos. (cx,cy) é o CENTRO. size = altura visual.
+// O aspect compensa para os pixels parecerem quadrados em NDC.
+void HUD_DrawHeart(float cx, float cy, float size, float aspect, float r, float g, float b) {
+    // Estilo "pixel art": dois lóbulos quadrados em cima e um V de retângulos embaixo.
+    float h = size;
+    float w = h / aspect; // largura igual à altura em pixels
+
+    float lobeW = w * 0.45f;
+    float lobeH = h * 0.40f;
+    float top   = cy + h * 0.35f;
+
+    // Lóbulos (cantinhos arredondados ficam fora porque é pixel art)
+    HUD_DrawRect(cx - w * 0.5f,         top - lobeH, lobeW, lobeH, r, g, b, 1.0f);
+    HUD_DrawRect(cx + w * 0.5f - lobeW, top - lobeH, lobeW, lobeH, r, g, b, 1.0f);
+
+    // Faixa central que cobre o vão entre os lóbulos
+    HUD_DrawRect(cx - w * 0.35f, top - lobeH - h * 0.05f, w * 0.7f, h * 0.20f, r, g, b, 1.0f);
+
+    // V de retângulos descendo (largura cai linearmente)
+    int N = 7;
+    float startY = top - lobeH - h * 0.05f;
+    float totalDown = h * 0.55f;
+    float stepH = totalDown / (float)N;
+    for (int i = 0; i < N; ++i) {
+        float t = (float)(i + 1) / (float)N;
+        float ww = w * (1.0f - t);
+        HUD_DrawRect(cx - ww * 0.5f, startY - (i + 1) * stepH, ww, stepH + 0.002f, r, g, b, 1.0f);
+    }
+}
 
 // ============================================================================
 // SISTEMA DE FÍSICA OTIMIZADO (COLLISION MESH)
@@ -418,6 +516,7 @@ void LoadShadersFromFiles() {
     g_model_uniform      = glGetUniformLocation(g_GpuProgramID, "model"); g_view_uniform       = glGetUniformLocation(g_GpuProgramID, "view"); 
     g_projection_uniform = glGetUniformLocation(g_GpuProgramID, "projection"); g_object_id_uniform  = glGetUniformLocation(g_GpuProgramID, "object_id"); 
     g_bbox_min_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_min"); g_bbox_max_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_max");
+    g_hit_flash_uniform  = glGetUniformLocation(g_GpuProgramID, "hit_flash");
     glUseProgram(g_GpuProgramID); glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage0"), 0);
     glUseProgram(0);
 }
@@ -638,6 +737,7 @@ int main(int argc, char* argv[])
     BuildCylinder();
 
     TextRendering_Init();
+    HUD_Init();
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
@@ -659,14 +759,20 @@ int main(int argc, char* argv[])
 
     while (!glfwWindowShouldClose(window))
     {
-        glClearColor(0.05f, 0.05f, 0.05f, 1.0f); 
+        glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(g_GpuProgramID);
+        glUniform1f(g_hit_flash_uniform, 0.0f); // default: sem flash
 
         static float lastTime = (float)glfwGetTime();
         float currentTime = (float)glfwGetTime();
         float deltaTime = currentTime - lastTime;
         lastTime = currentTime;
+
+        // GAME OVER: HP zerado congela tudo (mantém renderização para mostrar tela)
+        if (g_PlayerHP <= 0) {
+            deltaTime = 0.0f;
+        }
 
         float y = sin(g_CameraPhi);
         float z = cos(g_CameraPhi) * cos(g_CameraTheta);
@@ -796,6 +902,37 @@ int main(int argc, char* argv[])
         glUniform1i(g_object_id_uniform, WALL); 
         DrawModel(&quakeMapModel);
 
+        // --- SEPARAÇÃO ALIEN x ALIEN (anti-overlap) ---
+        // Empurra pares de aliens que estão muito próximos. Roda antes da IA.
+        const float ALIEN_RADIUS = 0.45f;
+        const float MIN_ALIEN_DIST = 2.0f * ALIEN_RADIUS;
+        for (size_t i = 0; i < mapEntities.size(); ++i) {
+            if (mapEntities[i].type != ALIEN) continue;
+            for (size_t j = i + 1; j < mapEntities.size(); ++j) {
+                if (mapEntities[j].type != ALIEN) continue;
+                float dx = mapEntities[j].x - mapEntities[i].x;
+                float dz = mapEntities[j].z - mapEntities[i].z;
+                float d2 = dx*dx + dz*dz;
+                if (d2 >= MIN_ALIEN_DIST * MIN_ALIEN_DIST) continue;
+                float d = sqrtf(d2);
+                if (d < 0.0001f) { dx = 1.0f; dz = 0.0f; d = 1.0f; }
+                float overlap = MIN_ALIEN_DIST - d;
+                float nx = dx / d, nz = dz / d;
+                float push = overlap * 0.5f;
+                // Tenta separar respeitando paredes
+                float aX = mapEntities[i].x - nx * push;
+                float aZ = mapEntities[i].z - nz * push;
+                float bX = mapEntities[j].x + nx * push;
+                float bZ = mapEntities[j].z + nz * push;
+                if (!CheckWallCollision(aX, mapEntities[i].y, aZ, 0.3f, 1.0f)) {
+                    mapEntities[i].x = aX; mapEntities[i].z = aZ;
+                }
+                if (!CheckWallCollision(bX, mapEntities[j].y, bZ, 0.3f, 1.0f)) {
+                    mapEntities[j].x = bX; mapEntities[j].z = bZ;
+                }
+            }
+        }
+
         // --- ATUALIZANDO INIMIGOS ---
         for (auto& ent : mapEntities) {
             if (ent.type == 0) continue; 
@@ -838,61 +975,143 @@ int main(int argc, char* argv[])
                     float ndirX = dirX / dist;
                     float ndirZ = dirZ / dist;
 
-                    // Só avança se ainda não está no alcance corpo a corpo
-                    if (dist > MELEE_RANGE) {
-                        float nX = ent.x + ndirX * ENEMY_SPEED * deltaTime;
-                        float nZ = ent.z + ndirZ * ENEMY_SPEED * deltaTime;
+                    if (ent.behavior == ALIEN_CHASER) {
+                        // Só avança se ainda não está no alcance corpo a corpo
+                        if (dist > MELEE_RANGE) {
+                            float stepLen = ENEMY_SPEED * deltaTime;
 
-                        if (!CheckWallCollision(nX, ent.y, nZ, 0.3f, 1.0f)) {
-                            ent.x = nX;
-                            ent.z = nZ;
+                            // Helper: testa se há um chão razoável em (x,z) e se não bate
+                            // em parede. Permite descer pequenos degraus (ALIEN_STEP_DOWN)
+                            // mas recusa o vazio (sem chão de jeito nenhum).
+                            const float ALIEN_STEP_DOWN = 1.5f; // queda máxima por passo
+                            auto tryStep = [&](float angleOffset, float& outX, float& outZ, float& outY) -> bool {
+                                float ca = cosf(angleOffset);
+                                float sa = sinf(angleOffset);
+                                float dX = ndirX * ca - ndirZ * sa;
+                                float dZ = ndirX * sa + ndirZ * ca;
+                                float nX = ent.x + dX * stepLen;
+                                float nZ = ent.z + dZ * stepLen;
+
+                                // Procura chão na nova posição (a partir de bem alto)
+                                float searchFromY = ent.y + 1.0f;
+                                float fY = ResolveFloorHeight(nX, searchFromY, nZ);
+                                if (fY < -9000.0f) return false;             // Vazio: recusa
+                                if (fY > ent.y + STEP_HEIGHT + 0.05f) return false; // Subida grande demais
+                                if (ent.y - fY > ALIEN_STEP_DOWN) return false;     // Despenhadeiro
+
+                                if (CheckWallCollision(nX, fY, nZ, 0.3f, 1.0f)) return false;
+
+                                outX = nX;
+                                outZ = nZ;
+                                outY = fY;
+                                return true;
+                            };
+
+                            // Tenta o caminho direto; se falhar, abre o leque até 90° pros
+                            // dois lados pra contornar obstáculos.
+                            const float angles[] = {
+                                0.0f,
+                                 0.5236f, -0.5236f,   // ±30°
+                                 1.0472f, -1.0472f,   // ±60°
+                                 1.5708f, -1.5708f    // ±90°
+                            };
+
+                            float nX, nZ, nY;
+                            for (float a : angles) {
+                                if (tryStep(a, nX, nZ, nY)) {
+                                    ent.x = nX;
+                                    ent.z = nZ;
+                                    ent.y = nY;
+                                    break;
+                                }
+                            }
                         }
+
+                        // BATIDA: aplica knockback nos dois e dano no jogador
+                        if (dist <= MELEE_RANGE && ent.hitCooldown == 0.0f) {
+                            if (g_PlayerHP > 0) {
+                                g_PlayerHP -= ALIEN_DAMAGE;
+                                if (g_PlayerHP < 0) g_PlayerHP = 0;
+                            }
+                            ent.hitCooldown = HIT_COOLDOWN;
+
+                            // Empurra alien para trás (sentido oposto ao jogador)
+                            float bX = ent.x - ndirX * BOUNCE_DIST;
+                            float bZ = ent.z - ndirZ * BOUNCE_DIST;
+                            if (!CheckWallCollision(bX, ent.y, bZ, 0.3f, 1.0f)) {
+                                ent.x = bX;
+                                ent.z = bZ;
+                            }
+
+                            // Empurra jogador para trás também
+                            glm::vec3 pushPos = glm::vec3(
+                                g_CameraPosition.x + ndirX * PLAYER_KNOCKBACK,
+                                g_CameraPosition.y,
+                                g_CameraPosition.z + ndirZ * PLAYER_KNOCKBACK
+                            );
+                            if (!CheckWallCollision(pushPos.x, pushPos.y - PLAYER_HEIGHT, pushPos.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
+                                !CheckEntityCollision(pushPos, PLAYER_RADIUS, PLAYER_HEIGHT)) {
+                                g_CameraPosition.x = pushPos.x;
+                                g_CameraPosition.z = pushPos.z;
+                            }
+                        }
+
+                        float runAnimSpeed = 15.0f;
+                        alienBobbingY = abs(sin(currentTime * runAnimSpeed)) * 0.15f;
+                        alienWobbleZ = cos(currentTime * runAnimSpeed * 0.5f) * 0.15f;
                     }
+                    else if (ent.behavior == ALIEN_SHOOTER) {
+                        // Atirador: parado, dispara projeteis lentos quando o cooldown zera
+                        ent.shootCooldown -= deltaTime;
+                        const float SHOOT_INTERVAL = 2.2f;
+                        const float PROJECTILE_SPEED = 6.0f;
+                        const float PROJECTILE_LIFE = 4.0f;
+                        if (ent.shootCooldown <= 0.0f) {
+                            ent.shootCooldown = SHOOT_INTERVAL;
 
-                    // BATIDA: aplica knockback nos dois e dano no jogador
-                    if (dist <= MELEE_RANGE && ent.hitCooldown == 0.0f) {
-                        if (g_PlayerHP > 0) {
-                            g_PlayerHP -= ALIEN_DAMAGE;
-                            if (g_PlayerHP < 0) g_PlayerHP = 0;
-                        }
-                        ent.hitCooldown = HIT_COOLDOWN;
+                            // Origem na altura do peito do alien
+                            glm::vec3 origin(ent.x, ent.y + 0.9f, ent.z);
+                            glm::vec3 target(g_CameraPosition.x, g_CameraPosition.y - 0.3f, g_CameraPosition.z);
+                            glm::vec3 dir = target - origin;
+                            float dlen = sqrtf(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z);
+                            if (dlen > 0.0001f) dir /= dlen;
 
-                        // Empurra alien para trás (sentido oposto ao jogador)
-                        float bX = ent.x - ndirX * BOUNCE_DIST;
-                        float bZ = ent.z - ndirZ * BOUNCE_DIST;
-                        if (!CheckWallCollision(bX, ent.y, bZ, 0.3f, 1.0f)) {
-                            ent.x = bX;
-                            ent.z = bZ;
+                            EnemyProjectile ep;
+                            ep.active = true;
+                            ep.pos = origin + dir * 0.6f; // sai um pouco à frente do alien
+                            ep.vel = dir * PROJECTILE_SPEED;
+                            ep.life = PROJECTILE_LIFE;
+                            g_EnemyProjectiles.push_back(ep);
                         }
-
-                        // Empurra jogador para trás também
-                        glm::vec3 pushPos = glm::vec3(
-                            g_CameraPosition.x + ndirX * PLAYER_KNOCKBACK,
-                            g_CameraPosition.y,
-                            g_CameraPosition.z + ndirZ * PLAYER_KNOCKBACK
-                        );
-                        if (!CheckWallCollision(pushPos.x, pushPos.y - PLAYER_HEIGHT, pushPos.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-                            !CheckEntityCollision(pushPos, PLAYER_RADIUS, PLAYER_HEIGHT)) {
-                            g_CameraPosition.x = pushPos.x;
-                            g_CameraPosition.z = pushPos.z;
-                        }
+                        // Pequena animação parada (respiração)
+                        alienBobbingY = sinf(currentTime * 2.0f) * 0.05f;
                     }
-
-                    float runAnimSpeed = 15.0f;
-                    alienBobbingY = abs(sin(currentTime * runAnimSpeed)) * 0.15f;
-                    alienWobbleZ = cos(currentTime * runAnimSpeed * 0.5f) * 0.15f;
                 }
                 
                 float angle = atan2(dirX, dirZ);
                 // OFFSET DE 0.65f ADICIONADO PARA NÃO FICAR ENTERRADO
-                model = Matrix_Translate(ent.x, ent.y + alienBobbingY + 0.65f, ent.z) 
-                      * Matrix_Rotate_Y(angle + 1.5708f) 
+                model = Matrix_Translate(ent.x, ent.y + alienBobbingY + 0.65f, ent.z)
+                      * Matrix_Rotate_Y(angle + 1.5708f)
                       * Matrix_Rotate_Z(alienWobbleZ)
                       * Matrix_Scale(ent.scale, ent.scale, ent.scale);
-                      
+
+                // Pisca-pisca ao ser baleado: decai e alterna intensidade
+                if (ent.hitFlash > 0.0f) {
+                    ent.hitFlash -= deltaTime;
+                    if (ent.hitFlash < 0.0f) ent.hitFlash = 0.0f;
+                }
+                float flashIntensity = 0.0f;
+                if (ent.hitFlash > 0.0f) {
+                    // Pisca 3x na duração do flash (~12 Hz)
+                    float strobe = 0.5f + 0.5f * sinf(ent.hitFlash * 75.0f);
+                    flashIntensity = strobe * 0.85f;
+                }
+                glUniform1f(g_hit_flash_uniform, flashIntensity);
+
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                 glUniform1i(g_object_id_uniform, ALIEN);
-                DrawModel(&alienModel); 
+                DrawModel(&alienModel);
+                glUniform1f(g_hit_flash_uniform, 0.0f); // restaura para próximos draws
             }
             else if (ent.type == BOX) {
                 float boxFloorY = ResolveFloorHeight(ent.x, ent.y, ent.z);
@@ -914,7 +1133,7 @@ int main(int argc, char* argv[])
         float recoilOffsetL = 0.0f; float recoilOffsetR = 0.0f;
         if (recoilTimer > 0.0f) { recoilTimer += deltaTime; if (recoilTimer >= RECOIL_DURATION) { recoilTimer = 0.0f; activeGun = 1 - activeGun; } }
 
-        if (g_LeftMouseButtonPressed && recoilTimer == 0.0f) {
+        if (g_LeftMouseButtonPressed && recoilTimer == 0.0f && g_PlayerHP > 0) {
             recoilTimer += deltaTime; 
             Projectile proj; proj.active = true; proj.t = 0.0f;
             float sideOffset = (activeGun == 0) ? -0.15f : 0.15f;
@@ -942,9 +1161,13 @@ int main(int argc, char* argv[])
             for (auto& ent : mapEntities) {
                 if (ent.type == ALIEN) {
                     if (CheckAABB(glm::vec3(pos.x, pos.y, pos.z), bulletSize, glm::vec3(ent.x, ent.y, ent.z), alienSize)) {
-                        p.active = false; 
-                        ent.type = 0; 
-                        break; 
+                        p.active = false;
+                        ent.hp -= 1;
+                        ent.hitFlash = 0.25f; // segundos de pisca-pisca
+                        if (ent.hp <= 0) {
+                            ent.type = 0; // morre
+                        }
+                        break;
                     }
                 }
             }
@@ -960,6 +1183,56 @@ int main(int argc, char* argv[])
             DrawVirtualObject("laser_cylinder");
         }
         g_Projectiles.erase(std::remove_if(g_Projectiles.begin(), g_Projectiles.end(), [](const Projectile& p) { return !p.active; }), g_Projectiles.end());
+
+        // --- ATUALIZAÇÃO DOS PROJETEIS DOS INIMIGOS ---
+        {
+            const float ENEMY_PROJECTILE_RADIUS = 0.18f;
+            const int   ENEMY_PROJECTILE_DAMAGE = 8;
+            glm::vec3 playerCenter(g_CameraPosition.x, g_CameraPosition.y - PLAYER_HEIGHT * 0.5f, g_CameraPosition.z);
+
+            for (auto& ep : g_EnemyProjectiles) {
+                if (!ep.active) continue;
+                ep.pos += ep.vel * deltaTime;
+                ep.life -= deltaTime;
+                if (ep.life <= 0.0f) { ep.active = false; continue; }
+
+                if (CheckWallCollision(ep.pos.x, ep.pos.y, ep.pos.z, 0.1f, 0.1f)) {
+                    ep.active = false; continue;
+                }
+
+                // Colisão com o jogador (cápsula simplificada)
+                float pdx = ep.pos.x - playerCenter.x;
+                float pdz = ep.pos.z - playerCenter.z;
+                float pdy = ep.pos.y - playerCenter.y;
+                float r = ENEMY_PROJECTILE_RADIUS + PLAYER_RADIUS;
+                if (pdx*pdx + pdz*pdz <= r*r && fabsf(pdy) <= PLAYER_HEIGHT * 0.6f) {
+                    if (g_PlayerHP > 0) {
+                        g_PlayerHP -= ENEMY_PROJECTILE_DAMAGE;
+                        if (g_PlayerHP < 0) g_PlayerHP = 0;
+                    }
+                    ep.active = false; continue;
+                }
+
+                // Render: bolinha alongada na direção do movimento
+                float vmag = sqrtf(ep.vel.x*ep.vel.x + ep.vel.y*ep.vel.y + ep.vel.z*ep.vel.z);
+                float yaw = 0.0f, pitch = 0.0f;
+                if (vmag > 0.0001f) {
+                    glm::vec3 vd = ep.vel / vmag;
+                    yaw = atan2f(vd.x, vd.z);
+                    pitch = asinf(-vd.y);
+                }
+                model = Matrix_Translate(ep.pos.x, ep.pos.y, ep.pos.z)
+                      * Matrix_Rotate_Y(yaw) * Matrix_Rotate_X(pitch)
+                      * Matrix_Scale(0.06f, 0.06f, 0.4f);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, BULLET);
+                DrawVirtualObject("laser_cylinder");
+            }
+            g_EnemyProjectiles.erase(
+                std::remove_if(g_EnemyProjectiles.begin(), g_EnemyProjectiles.end(),
+                    [](const EnemyProjectile& e) { return !e.active; }),
+                g_EnemyProjectiles.end());
+        }
 
         if (recoilTimer > 0.0f) {
             float t = recoilTimer / RECOIL_DURATION; 
@@ -979,14 +1252,61 @@ int main(int argc, char* argv[])
         glEnable(GL_DEPTH_TEST);
         TextRendering_ShowFramesPerSecond(window);
 
-        // HUD: HP do jogador (canto inferior esquerdo)
+        // HUD: barra de HP estilo Quake
         {
-            char hpBuffer[64];
-            snprintf(hpBuffer, sizeof(hpBuffer), "HP: %d / %d", g_PlayerHP, g_PlayerMaxHP);
-            float lineHeight = TextRendering_LineHeight(window);
-            TextRendering_PrintString(window, hpBuffer, -1.0f + TextRendering_CharWidth(window), -1.0f + lineHeight, 1.5f);
+            int win_w, win_h;
+            glfwGetWindowSize(window, &win_w, &win_h);
+            float aspect = (float)win_w / (float)win_h;
+
+            float pct = (float)g_PlayerHP / (float)g_PlayerMaxHP;
+            if (pct < 0.0f) pct = 0.0f;
+            if (pct > 1.0f) pct = 1.0f;
+
+            // Barra: menor, no canto inferior esquerdo
+            float marginY = 0.04f;
+            float barH    = 0.06f;
+            float barX    = -0.85f;
+            float barY    = -1.0f + marginY;
+            float barW    = 0.55f;
+
+            // Fundo com transparência (estilo HUD escuro)
+            glDisable(GL_DEPTH_TEST);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            // Fundo da barra
+            HUD_DrawRect(barX, barY, barW, barH, 0.05f, 0.06f, 0.08f, 0.85f);
+
+            // Preenchimento azul (mesmo verde-azulado da imagem de referência)
+            float fillW = barW * pct;
+            HUD_DrawRect(barX, barY, fillW, barH, 0.30f, 0.55f, 0.85f, 0.95f);
+
+            // Borda inferior/superior (linhas finas)
+            HUD_DrawRect(barX, barY,             barW, 0.005f, 1.0f, 1.0f, 1.0f, 0.45f);
+            HUD_DrawRect(barX, barY + barH,      barW, 0.005f, 1.0f, 1.0f, 1.0f, 0.25f);
+
+            // Coração à esquerda
+            float heartCX = barX - 0.03f;
+            float heartCY = barY + barH * 0.5f;
+            float heartH  = barH * 1.5f;
+            HUD_DrawHeart(heartCX, heartCY, heartH, aspect, 0.30f, 0.85f, 0.55f);
+
+            glDisable(GL_BLEND);
+            glEnable(GL_DEPTH_TEST);
+
+            // Números: HP grande sobre a barra
+            char hpStr[16];
+            snprintf(hpStr,  sizeof(hpStr),  "%d", g_PlayerHP);
+
+            TextRendering_SetColor(1.0f, 1.0f, 1.0f);
+            // HP atual, alinhado à esquerda da barra
+            TextRendering_PrintString(window, hpStr, barX + 0.012f, barY - 0.012f, 1.8f);
+            TextRendering_SetColor(0.0f, 0.0f, 0.0f); // restaura preto pro FPS
+
             if (g_PlayerHP <= 0) {
-                TextRendering_PrintString(window, "YOU DIED", -0.15f, 0.05f, 2.0f);
+                TextRendering_SetColor(1.0f, 0.2f, 0.2f);
+                TextRendering_PrintString(window, "YOU DIED", -0.22f, 0.05f, 3.0f);
+                TextRendering_SetColor(0.0f, 0.0f, 0.0f);
             }
         }
 
