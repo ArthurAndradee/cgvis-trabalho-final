@@ -27,11 +27,12 @@ const GLchar* const textvertexshader_source = ""
 const GLchar* const textfragmentshader_source = ""
 "#version 330\n"
 "uniform sampler2D tex;\n"
+"uniform vec3 textColor = vec3(0.0, 0.0, 0.0);\n"
 "in vec2 texCoords;\n"
 "out vec4 fragColor;\n"
 "void main()\n"
 "{\n"
-    "fragColor = vec4(0, 0, 0, texture(tex, texCoords).r);\n"
+    "fragColor = vec4(textColor, texture(tex, texCoords).r);\n"
 "}\n"
 "\0";
 
@@ -143,6 +144,14 @@ void TextRendering_Init()
 }
 
 float textscale = 1.5f;
+static float g_textColorR = 0.0f, g_textColorG = 0.0f, g_textColorB = 0.0f;
+
+void TextRendering_SetColor(float r, float g, float b)
+{
+    g_textColorR = r;
+    g_textColorG = g;
+    g_textColorB = b;
+}
 
 void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float x, float y, float scale = 1.0f)
 {
@@ -197,6 +206,8 @@ void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
         glUseProgram(textprogram_id);
+        GLint colLoc = glGetUniformLocation(textprogram_id, "textColor");
+        if (colLoc != -1) glUniform3f(colLoc, g_textColorR, g_textColorG, g_textColorB);
         glBindVertexArray(textVAO);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);

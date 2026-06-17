@@ -17,9 +17,10 @@ uniform mat4 projection;
 #define BULLET 6 // Adicionado o ID do projétil Laser
 
 uniform int object_id;
+uniform float hit_flash; // 0.0 = sem efeito, 1.0 = totalmente vermelho
 
 // AGORA O SHADER SÓ PRECISA DE UM SAMPLER PARA RENDERIZAR TUDO!
-uniform sampler2D TextureImage; 
+uniform sampler2D TextureImage;
 
 out vec4 color;
 
@@ -81,6 +82,11 @@ void main()
 
     color.rgb = ambient_term + diffuse_term + specular_term;
     color.a = 1.0;
+
+    // Pisca-pisca vermelho ao levar tiro
+    if (hit_flash > 0.0) {
+        color.rgb = mix(color.rgb, vec3(1.2, 0.0, 0.0), clamp(hit_flash, 0.0, 1.0));
+    }
 
     color.rgb = pow(color.rgb, vec3(1.0, 1.0, 1.0) / 2.2);
 }
