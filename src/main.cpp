@@ -748,7 +748,8 @@ int main(int argc, char* argv[])
     float RECOIL_DURATION = 0.25f; 
     float RECOIL_DISTANCE = 0.6f;  
 
-    // Constantes de Física
+    // Con
+    glm::vec2 playerVelocityXZ(0.0f, 0.0f); // NOVO: Vetor de Inércia Lateral
     float playerVelocityY = 0.0f;
     const float GRAVITY = -15.0f;
     const float JUMP_FORCE = 6.0f;
@@ -774,6 +775,9 @@ int main(int argc, char* argv[])
             deltaTime = 0.0f;
         }
 
+// ------------------------------------------------------------------------------------
+        // VETORES DA CÂMERA DO JOGADOR
+        // ------------------------------------------------------------------------------------
         float y = sin(g_CameraPhi);
         float z = cos(g_CameraPhi) * cos(g_CameraTheta);
         float x = cos(g_CameraPhi) * sin(g_CameraTheta);
@@ -789,14 +793,57 @@ int main(int argc, char* argv[])
         glm::vec3 right_walk(camera_right_vector.x, 0.0f, camera_right_vector.z);
         if(glm::length(right_walk) > 0.0f) right_walk = glm::normalize(right_walk);
 
-        float speed = 8.0f * deltaTime; 
+        // ------------------------------------------------------------------------------------
+        // FÍSICA OTIMIZADA DO JOGADOR (Mecânica de "Escorregar"/Friction do Quake)
+        // ------------------------------------------------------------------------------------
+        // Essa variável guarda o embalo do jogador. Como é "static", ela sobrevive a cada frame do "while".
+        static glm::vec3 playerVelocityXZ(0.0f, 0.0f, 0.0f);
         
-        glm::vec3 nextPos = glm::vec3(g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z);
+        // 1. Pega a direção que o jogador está tentando ir com o teclado
+        glm::vec3 inputDirection(0.0f, 0.0f, 0.0f);
+        if (g_WPressed) inputDirection += forward_walk;
+        if (g_SPressed) inputDirection -= forward_walk;
+        if (g_APressed) inputDirection -= right_walk;
+        if (g_DPressed) inputDirection += right_walk;
 
-        if (g_WPressed) nextPos += forward_walk * speed;
-        if (g_SPressed) nextPos -= forward_walk * speed;
-        if (g_APressed) nextPos -= right_walk * speed;
-        if (g_DPressed) nextPos += right_walk * speed;
+        if(glm::length(inputDirection) > 0.0f) {
+            inputDirection = glm::normalize(inputDirection); // Normaliza para não andar mais rápido na diagonal
+        }
+
+        // 2. Parâmetros de aceleração e atrito
+        float ACCELERATION = 40.0f; // O quão rápido ele chega na velocidade máxima
+        float FRICTION = 10.0f;     // O quanto o chão freia ele (menor = escorrega mais)
+        float MAX_SPEED = 8.0f;     // Velocidade máxima permitida
+        
+        // Se o jogador está no ar, ele tem menos atrito (Air Strafe leve)
+        if (playerVelocityY != 0.0f) {
+             FRICTION = 2.0f;
+             ACCELERATION = 15.0f;
+        }
+
+        // 3. Aplica Aceleração ou Atrito na Velocidade Atual
+        if (glm::length(inputDirection) > 0.0f) {
+            // Acelera na direção das teclas
+            playerVelocityXZ += inputDirection * ACCELERATION * deltaTime;
+
+            // Limita para não passar do MAX_SPEED
+            if (glm::length(playerVelocityXZ) > MAX_SPEED) {
+                playerVelocityXZ = glm::normalize(playerVelocityXZ) * MAX_SPEED;
+            }
+        } else {
+            // Nenhuma tecla apertada: aplica o Atrito para escorregar até parar
+            float currentSpeed = glm::length(playerVelocityXZ);
+            if (currentSpeed > 0.0f) {
+                float drop = currentSpeed * FRICTION * deltaTime; // Freia proporcional à velocidade
+                float newSpeed = currentSpeed - drop;
+                if (newSpeed < 0.0f) newSpeed = 0.0f;             // Se passar de zero, para totalmente
+                playerVelocityXZ = (playerVelocityXZ / currentSpeed) * newSpeed;
+            }
+        }
+
+        // 4. Calcula a nova posição de destino usando a inércia
+        glm::vec3 nextPos = glm::vec3(g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z);
+        nextPos += playerVelocityXZ * deltaTime;
 
         // FÍSICA 1: Colisão com paredes (com step-up estilo Quake)
         // Tenta o movimento normal. Se bloqueado, tenta de novo com os pés erguidos
@@ -820,15 +867,35 @@ int main(int argc, char* argv[])
             g_CameraPosition.x = nextPosFlat.x;
             g_CameraPosition.z = nextPosFlat.z;
             moved = true;
-        } else if (playerVelocityY <= 0.01f) {
-            // No chão (ou caindo): tenta step-up / step-off
+        } else {
+            // Tenta mover APENAS no eixo X (Deslizar)
+            if (destHasFloor(nextPosFlat.x, g_CameraPosition.z) &&
+                !CheckWallCollision(nextPosFlat.x, nextPosFlat.y - PLAYER_HEIGHT, g_CameraPosition.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
+                !CheckEntityCollision(glm::vec3(nextPosFlat.x, nextPosFlat.y, g_CameraPosition.z), PLAYER_RADIUS, PLAYER_HEIGHT)) {
+                g_CameraPosition.x = nextPosFlat.x;
+                playerVelocityXZ.z = 0.0f; // Perde o embalo no eixo que bateu
+                moved = true;
+            } 
+            // Tenta mover APENAS no eixo Z (Deslizar)
+            else if (destHasFloor(g_CameraPosition.x, nextPosFlat.z) &&
+                     !CheckWallCollision(g_CameraPosition.x, nextPosFlat.y - PLAYER_HEIGHT, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
+                     !CheckEntityCollision(glm::vec3(g_CameraPosition.x, nextPosFlat.y, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT)) {
+                g_CameraPosition.z = nextPosFlat.z;
+                playerVelocityXZ.x = 0.0f; // Perde o embalo no eixo que bateu
+                moved = true;
+            } else {
+                // Se bateu reto num "L", zera a velocidade pros dois lados
+                playerVelocityXZ = glm::vec3(0.0f);
+            }
+        }
+
+        // Tenta fazer o step-up só se a lógica de cima falhou em mover
+        if (!moved && playerVelocityY <= 0.01f) {
             float raisedFootY = (g_CameraPosition.y - PLAYER_HEIGHT) + STEP_HEIGHT;
             if (destHasFloor(nextPosFlat.x, nextPosFlat.z) &&
                 !CheckWallCollision(nextPosFlat.x, raisedFootY, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT) &&
                 !CheckEntityCollision(glm::vec3(nextPosFlat.x, g_CameraPosition.y + STEP_HEIGHT, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT)) {
-                // Erguer os pés desbloqueia: passa por cima do bumper.
-                // Se há um chão no alcance do passo, sobe; senão, anda mesmo assim
-                // e deixa a gravidade puxar (caída de qualquer altura).
+                
                 float candidateFloor = ResolveFloorHeight(nextPosFlat.x, raisedFootY, nextPosFlat.z);
                 float currentFoot = g_CameraPosition.y - PLAYER_HEIGHT;
                 float climb = candidateFloor - currentFoot;
@@ -836,12 +903,10 @@ int main(int argc, char* argv[])
                 g_CameraPosition.x = nextPosFlat.x;
                 g_CameraPosition.z = nextPosFlat.z;
                 if (climb > 0.0f && climb <= STEP_HEIGHT + 0.01f) {
-                    g_CameraPosition.y += climb;     // Sobe para o degrau imediatamente
-                    cameraYSmooth -= climb;          // ...mas a câmera "lembra" para deslizar
+                    g_CameraPosition.y += climb;     
+                    cameraYSmooth -= climb;          
                     playerVelocityY = 0.0f;
                 }
-                // Se climb < 0 (beira de penhasco) ou candidateFloor inválido,
-                // não mexe no Y — gravidade trata da queda no próximo bloco.
                 moved = true;
             }
         }
@@ -1234,20 +1299,56 @@ int main(int argc, char* argv[])
                 g_EnemyProjectiles.end());
         }
 
+        // ====================================================================
+        // ANIMAÇÃO PROCEDURAL DA ARMA (SWAY / BOBBING / RECOIL)
+        // ====================================================================
         if (recoilTimer > 0.0f) {
             float t = recoilTimer / RECOIL_DURATION; 
             float currentRecoil = (t < 0.2f) ? (t / 0.2f) * RECOIL_DISTANCE : ((1.0f - t) / 0.8f) * RECOIL_DISTANCE;
             if (activeGun == 0) recoilOffsetL = currentRecoil; else recoilOffsetR = currentRecoil;
         }
 
+        // 1. Calcula a intensidade do movimento do jogador (0.0 a 1.0)
+        float currentSpeed = glm::length(playerVelocityXZ);
+        float speedNormalized = std::min(1.0f, currentSpeed / 8.0f); // 8.0f é o MAX_SPEED
+
+        // 2. Animação de respiração (Sway) - Suave, ocorre mesmo parado
+        float swayTimer = currentTime * 1.5f; 
+        float swayX = cos(swayTimer) * 0.02f;
+        float swayY = sin(swayTimer * 2.0f) * 0.02f;
+
+        // 3. Animação de Passos (Bobbing) - Rápida e ampla, ocorre ao andar
+        float bobTimer = currentTime * 12.0f; // Frequência da passada
+        float bobAmount = 0.15f * speedNormalized; // Multiplicador de intensidade
+        
+        // Faz um "oito" perfeito
+        float bobX = cos(bobTimer * 0.5f) * bobAmount; 
+        float bobY = abs(sin(bobTimer)) * bobAmount * 0.5f; 
+
+        // 4. Junta tudo no Offset final da arma
+        float gunOffsetX = swayX + bobX;
+        float gunOffsetY = swayY + bobY;
+
         glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(Matrix_Identity()));
         glDisable(GL_DEPTH_TEST);
 
-        model = Matrix_Translate(-0.4f, -2.0f, -2.0f + recoilOffsetL) * Matrix_Rotate_Y(3.141592f + 0.01f) * Matrix_Rotate_X(0.20f) * Matrix_Scale(2.2f, 2.2f, 2.2f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model)); glUniform1i(g_object_id_uniform, GUN); DrawModel(&gunModel);
+        // Aplica o Offset calculado (gunOffsetX, gunOffsetY) à translação base da arma esquerda
+        model = Matrix_Translate(-0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetL) 
+              * Matrix_Rotate_Y(3.141592f + 0.01f) 
+              * Matrix_Rotate_X(0.20f) 
+              * Matrix_Scale(2.2f, 2.2f, 2.2f);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model)); 
+        glUniform1i(g_object_id_uniform, GUN); 
+        DrawModel(&gunModel);
 
-        model = Matrix_Translate(0.4f, -2.0f, -2.0f + recoilOffsetR) * Matrix_Rotate_Y(3.141592f - 0.01f) * Matrix_Rotate_X(0.20f) * Matrix_Scale(2.2f, 2.2f, 2.2f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model)); glUniform1i(g_object_id_uniform, GUN); DrawModel(&gunModel);
+        // Aplica o Offset calculado (gunOffsetX, gunOffsetY) à translação base da arma direita
+        model = Matrix_Translate(0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetR) 
+              * Matrix_Rotate_Y(3.141592f - 0.01f) 
+              * Matrix_Rotate_X(0.20f) 
+              * Matrix_Scale(2.2f, 2.2f, 2.2f);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model)); 
+        glUniform1i(g_object_id_uniform, GUN); 
+        DrawModel(&gunModel);
 
         glEnable(GL_DEPTH_TEST);
         TextRendering_ShowFramesPerSecond(window);

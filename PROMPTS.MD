@@ -10,6 +10,10 @@ PS E:\university\courses\2026-1\computacao-grafica-e-visualizacao\cgvis-trabalho
 6. Como mudar a r otação/direção/altura/escala da arma?
 7.  As armas estão perfeitas, apenas mais um detalhe. Faça com que, enquanto o botão esquerdo do mouse esteja sendo segurado: Uma arma, de cada vez, sofra "recúo", com o movimento de recúo sendo uma ida para trás rápida e uma volta para sua posição original lenta, uma arma só se movimenta se a outra terminou: 
 8. E como eu poderia usar um mapa já pronto? como eu poderia encontrar o mapa Quake 1 Demo?
+9. Faça com que o movimento do jogador seja suave, como se ele "escorregasse" bem levemente quando parar de se movimentar em uma direção: 
+10. De maneira similar, faça com que a arma segurada pelo personagem balance de forma natural como em outros jogos quando ele se mexe, mas não deve atrapalhar os disparos da arma.
+11. De maneira similar, faça com que a arma segurada pelo personagem balance de forma natural como em outros jogos quando ele se mexe, mas não deve atrapalhar os disparos da arma.
+12. 
 
 Duda: 
 1. when moving, the player is getting stuck on high ledges, I want to be able to fall down regardless of height
