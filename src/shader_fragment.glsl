@@ -14,7 +14,10 @@ uniform mat4 projection;
 #define BOX   3
 #define GUN   4
 #define FLOOR 5
-#define BULLET 6 // Adicionado o ID do projétil Laser
+#define BULLET 6 // ID para o Projétil Laser
+#define PORTAL 7 // ID para o Portal
+#define AMMO_BOX 8 // ID para a Caixa de Munição
+#define HEALTH_BOX 9 // ID para a Caixa de Vida
 
 uniform int object_id;
 uniform float hit_flash; // 0.0 = sem efeito, 1.0 = totalmente vermelho
@@ -27,15 +30,23 @@ out vec4 color;
 void main()
 {
     // =========================================================
-    // CUSTOMIZAÇÃO DA COR DO LASER
-    // Se for o tiro, pinta da cor desejada e ignora as sombras
+    // CUSTOMIZAÇÃO DA COR DOS ITENS ESPECIAIS E LASER
+    // Pinta da cor desejada e ignora as sombras (brilho puro)
     // =========================================================
     if (object_id == BULLET) {
-        // Cores em RGB (Vermelho, Verde, Azul, Opacidade). Valores de 0.0 a 1.0
-        // Para Amarelo: Vermelho no máximo (1.0) + Verde no máximo (1.0)
-        color = vec4(1.0, 1.0, 0.0, 1.0); 
-        
-        // Aplica correção gamma mesmo na cor pura para manter o brilho da tela correto
+        color = vec4(1.0, 1.0, 0.0, 1.0); // Amarelo
+        color.rgb = pow(color.rgb, vec3(1.0, 1.0, 1.0) / 2.2);
+        return; 
+    } else if (object_id == PORTAL) {
+        color = vec4(0.0, 0.0, 1.0, 1.0); // Azul
+        color.rgb = pow(color.rgb, vec3(1.0, 1.0, 1.0) / 2.2);
+        return; 
+    } else if (object_id == AMMO_BOX) {
+        color = vec4(0.2, 0.8, 0.2, 1.0); // Verde
+        color.rgb = pow(color.rgb, vec3(1.0, 1.0, 1.0) / 2.2);
+        return; 
+    } else if (object_id == HEALTH_BOX) {
+        color = vec4(0.9, 0.2, 0.4, 1.0); // Vermelho/Rosa
         color.rgb = pow(color.rgb, vec3(1.0, 1.0, 1.0) / 2.2);
         return; 
     }

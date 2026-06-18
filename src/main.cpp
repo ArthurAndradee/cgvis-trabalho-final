@@ -18,8 +18,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
-#include <glad/glad.h>   
-#include <GLFW/glfw3.h>  
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 #include <glm/vec2.hpp>
@@ -31,73 +31,84 @@
 #include "matrices.h"
 
 // Definições de IDs
-#define WALL  1
+#define WALL 1
 #define ALIEN 2
-#define BOX   3
-#define GUN   4
+#define BOX 3
+#define GUN 4
 #define FLOOR 5
-#define BULLET 6 // ID para o Projétil Laser
-#define PORTAL 7 // ID para o Portal
+#define BULLET 6     // ID para o Projétil Laser
+#define PORTAL 7     // ID para o Portal
+#define AMMO_BOX 8   // ID para caixa de Munição
+#define HEALTH_BOX 9 // ID para caixa de Vida
 
-struct ObjModel {
-    tinyobj::attrib_t                 attrib;
-    std::vector<tinyobj::shape_t>     shapes;
-    std::vector<tinyobj::material_t>  materials;
+struct ObjModel
+{
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
 
-    ObjModel(const char* filename, const char* basepath = NULL, bool triangulate = true) {
+    ObjModel(const char *filename, const char *basepath = NULL, bool triangulate = true)
+    {
         printf("Carregando objetos do arquivo \"%s\"...\n", filename);
         std::string fullpath(filename);
         std::string dirname;
-        if (basepath == NULL) {
+        if (basepath == NULL)
+        {
             auto i = fullpath.find_last_of("/");
-            if (i != std::string::npos) {
-                dirname = fullpath.substr(0, i+1);
+            if (i != std::string::npos)
+            {
+                dirname = fullpath.substr(0, i + 1);
                 basepath = dirname.c_str();
             }
         }
         std::string warn, err;
         bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename, basepath, triangulate);
-        if (!err.empty()) fprintf(stderr, "\n%s\n", err.c_str());
-        if (!ret) throw std::runtime_error("Erro ao carregar modelo.");
-        for (size_t shape = 0; shape < shapes.size(); ++shape) {
-            if (shapes[shape].name.empty()) throw std::runtime_error("Objeto sem nome.");
+        if (!err.empty())
+            fprintf(stderr, "\n%s\n", err.c_str());
+        if (!ret)
+            throw std::runtime_error("Erro ao carregar modelo.");
+        for (size_t shape = 0; shape < shapes.size(); ++shape)
+        {
+            if (shapes[shape].name.empty())
+                throw std::runtime_error("Objeto sem nome.");
             printf("- Objeto interno encontrado: '%s'\n", shapes[shape].name.c_str());
         }
         printf("OK.\n");
     }
 };
 
-struct SceneObject {
-    std::string  name;        
-    size_t       first_index; 
-    size_t       num_indices; 
-    GLenum       rendering_mode; 
-    GLuint       vertex_array_object_id; 
-    glm::vec3    bbox_min; 
-    glm::vec3    bbox_max;
-    GLuint       texture_id;
+struct SceneObject
+{
+    std::string name;
+    size_t first_index;
+    size_t num_indices;
+    GLenum rendering_mode;
+    GLuint vertex_array_object_id;
+    glm::vec3 bbox_min;
+    glm::vec3 bbox_max;
+    GLuint texture_id;
 };
 
 std::map<std::string, SceneObject> g_VirtualScene;
-std::stack<glm::mat4>  g_MatrixStack;
-std::map<std::string, GLuint> g_TextureCache; 
+std::stack<glm::mat4> g_MatrixStack;
+std::map<std::string, GLuint> g_TextureCache;
 GLuint g_DefaultTexture = 0;
 float g_ScreenRatio = 1.0f;
 float g_AngleX = 0.0f;
 float g_AngleY = 0.0f;
 float g_AngleZ = 0.0f;
 bool g_LeftMouseButtonPressed = false;
-bool g_RightMouseButtonPressed = false; 
-bool g_MiddleMouseButtonPressed = false; 
-float g_CameraTheta = 0.0f; 
-float g_CameraPhi = 0.0f;   
-float g_CameraDistance = 3.5f; 
+bool g_RightMouseButtonPressed = false;
+bool g_MiddleMouseButtonPressed = false;
+float g_CameraTheta = 0.0f;
+float g_CameraPhi = 0.0f;
+float g_CameraDistance = 3.5f;
 
 // ============================================================================
 // CONFIGURAÇÕES DA FASE E ENTIDADES
 // ============================================================================
 
-float g_MapScale = 0.50f; 
+float g_MapScale = 0.50f;
 
 // Localização Exata do Jogador
 glm::vec4 g_CameraPosition = glm::vec4(-2.21f, -2.66f, -9.25f, 1.0f);
@@ -106,38 +117,45 @@ glm::vec4 g_CameraPosition = glm::vec4(-2.21f, -2.66f, -9.25f, 1.0f);
 int g_PlayerHP = 100;
 const int g_PlayerMaxHP = 100;
 
+int g_PlayerAmmo = 30;           // Munição inicial
+const int g_PlayerMaxAmmo = 100; // Munição máxima que pode carregar
+
 // Comportamento dos aliens
-#define ALIEN_CHASER  0
+#define ALIEN_CHASER 0
 #define ALIEN_SHOOTER 1
 
-struct EntitySpawn {
+struct EntitySpawn
+{
     int type;
     float x, y, z;
     float scale;
-    float hitCooldown; // segundos restantes ate poder bater no jogador de novo
-    int   behavior;    // ALIEN_CHASER ou ALIEN_SHOOTER (ignorado para nao-aliens)
+    float hitCooldown;   // segundos restantes ate poder bater no jogador de novo
+    int behavior;        // ALIEN_CHASER ou ALIEN_SHOOTER (ignorado para nao-aliens)
     float shootCooldown; // segundos ate poder atirar de novo (apenas SHOOTER)
-    int   hp;           // pontos de vida (apenas aliens)
-    float hitFlash;     // segundos de pisca-pisca vermelho restantes
+    int hp;              // pontos de vida (apenas aliens)
+    float hitFlash;      // segundos de pisca-pisca vermelho restantes
 };
 
 // Spawns dos Aliens e do Portal (Y Aumentado em +1.0f para caírem de pé)
 std::vector<EntitySpawn> mapEntities = {
-    { ALIEN,   4.27f, -1.16f, -14.56f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,  -0.34f, -1.51f, -21.68f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.0f, 3, 0.0f },
-    { ALIEN,   6.66f, -1.72f, -25.10f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,   6.92f, -1.09f, -33.12f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.5f, 3, 0.0f },
-    { ALIEN,   5.96f, -0.80f, -30.05f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,  -5.96f, -0.02f, -32.90f, 0.5f, 0.0f, ALIEN_SHOOTER, 2.0f, 3, 0.0f },
-    { ALIEN,  -4.86f,  2.45f, -36.45f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,   4.77f,  0.59f, -43.51f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.2f, 3, 0.0f },
-    { ALIEN,   4.41f,  0.59f, -44.73f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,   2.10f,  0.49f, -44.06f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { PORTAL,  7.22f,  0.69f, -44.22f, 1.0f, 0.0f, 0,             0.0f, 0, 0.0f }
-};
+    {ALIEN, 4.27f, -1.16f, -14.56f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
+    {ALIEN, -0.34f, -1.51f, -21.68f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.0f, 3, 0.0f},
+    {ALIEN, 6.66f, -1.72f, -25.10f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
+    {ALIEN, 6.92f, -1.09f, -33.12f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.5f, 3, 0.0f},
+    {ALIEN, 5.96f, -0.80f, -30.05f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
+    {ALIEN, -5.96f, -0.02f, -32.90f, 0.5f, 0.0f, ALIEN_SHOOTER, 2.0f, 3, 0.0f},
+    {ALIEN, -4.86f, 2.45f, -36.45f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
+    {ALIEN, 4.77f, 0.59f, -43.51f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.2f, 3, 0.0f},
+    {ALIEN, 4.41f, 0.59f, -44.73f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
+    {ALIEN, 2.10f, 0.49f, -44.06f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
+    {PORTAL, 7.22f, 0.69f, -44.22f, 1.0f, 0.0f, 0, 0.0f, 0, 0.0f},
+    {AMMO_BOX, 2.0f, -1.50f, -15.0f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f},
+    {AMMO_BOX, 5.0f, -0.80f, -31.0f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f},
+    {HEALTH_BOX, -3.0f, 2.45f, -36.0f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f}};
 
 // --- ESTRUTURA E ARMAZENAMENTO DO PROJÉTIL (BEZIER) ---
-struct Projectile {
+struct Projectile
+{
     bool active;
     float t;
     glm::vec4 p0, p1, p2, p3;
@@ -145,7 +163,8 @@ struct Projectile {
 std::vector<Projectile> g_Projectiles;
 
 // Projeteis dos inimigos (movimento linear lento)
-struct EnemyProjectile {
+struct EnemyProjectile
+{
     bool active;
     glm::vec3 pos;
     glm::vec3 vel;
@@ -158,8 +177,8 @@ bool g_WPressed = false;
 bool g_APressed = false;
 bool g_SPressed = false;
 bool g_DPressed = false;
-bool g_SpacePressed = false; 
-bool g_ShiftPressed = false; 
+bool g_SpacePressed = false;
+bool g_ShiftPressed = false;
 
 float g_ForearmAngleZ = 0.0f;
 float g_ForearmAngleX = 0.0f;
@@ -177,101 +196,134 @@ std::string nomeBox;
 std::string nomeGun;
 std::string nomePlane;
 
-void ErrorCallback(int error, const char* description) { fprintf(stderr, "ERROR: GLFW: %s\n", description); }
+void ErrorCallback(int error, const char *description) { fprintf(stderr, "ERROR: GLFW: %s\n", description); }
 
 double g_LastCursorPosX, g_LastCursorPosY;
 bool g_FirstMouse = true;
 
-void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-    if (button == GLFW_MOUSE_BUTTON_LEFT) g_LeftMouseButtonPressed = (action == GLFW_PRESS);
-    if (button == GLFW_MOUSE_BUTTON_RIGHT) g_RightMouseButtonPressed = (action == GLFW_PRESS);
-    if (button == GLFW_MOUSE_BUTTON_MIDDLE) g_MiddleMouseButtonPressed = (action == GLFW_PRESS);
+void MouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
+{
+    if (button == GLFW_MOUSE_BUTTON_LEFT)
+        g_LeftMouseButtonPressed = (action == GLFW_PRESS);
+    if (button == GLFW_MOUSE_BUTTON_RIGHT)
+        g_RightMouseButtonPressed = (action == GLFW_PRESS);
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE)
+        g_MiddleMouseButtonPressed = (action == GLFW_PRESS);
 }
 
-void CursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
-    if (g_FirstMouse) {
-        g_LastCursorPosX = xpos; g_LastCursorPosY = ypos; g_FirstMouse = false;
+void CursorPosCallback(GLFWwindow *window, double xpos, double ypos)
+{
+    if (g_FirstMouse)
+    {
+        g_LastCursorPosX = xpos;
+        g_LastCursorPosY = ypos;
+        g_FirstMouse = false;
     }
     float dx = xpos - g_LastCursorPosX;
     float dy = ypos - g_LastCursorPosY;
-    g_CameraTheta -= 0.01f * dx; 
-    g_CameraPhi   -= 0.01f * dy; 
-    float phimax = 3.141592f / 2.0f - 0.01f; 
+    g_CameraTheta -= 0.01f * dx;
+    g_CameraPhi -= 0.01f * dy;
+    float phimax = 3.141592f / 2.0f - 0.01f;
     float phimin = -phimax;
-    if (g_CameraPhi > phimax) g_CameraPhi = phimax;
-    if (g_CameraPhi < phimin) g_CameraPhi = phimin;
-    g_LastCursorPosX = xpos; g_LastCursorPosY = ypos;
+    if (g_CameraPhi > phimax)
+        g_CameraPhi = phimax;
+    if (g_CameraPhi < phimin)
+        g_CameraPhi = phimin;
+    g_LastCursorPosX = xpos;
+    g_LastCursorPosY = ypos;
 }
 
-void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-    g_CameraDistance -= 0.1f*yoffset;
-    if (g_CameraDistance < 0.001f) g_CameraDistance = 0.001f;
+void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
+{
+    g_CameraDistance -= 0.1f * yoffset;
+    if (g_CameraDistance < 0.001f)
+        g_CameraDistance = 0.001f;
 }
 
 void Correcao_KeyCallback(int key, int action, int mod);
 
-void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod) {
+void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mod)
+{
     Correcao_KeyCallback(key, action, mod);
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, GL_TRUE);
-    if (key == GLFW_KEY_P && action == GLFW_PRESS) g_UsePerspectiveProjection = true;
-    if (key == GLFW_KEY_O && action == GLFW_PRESS) g_UsePerspectiveProjection = false;
-    if (key == GLFW_KEY_H && action == GLFW_PRESS) g_ShowInfoText = !g_ShowInfoText;
-    
-    if (key == GLFW_KEY_W) g_WPressed = (action != GLFW_RELEASE);
-    if (key == GLFW_KEY_S) g_SPressed = (action != GLFW_RELEASE);
-    if (key == GLFW_KEY_A) g_APressed = (action != GLFW_RELEASE);
-    if (key == GLFW_KEY_D) g_DPressed = (action != GLFW_RELEASE);
-    if (key == GLFW_KEY_SPACE) g_SpacePressed = (action != GLFW_RELEASE);
-    if (key == GLFW_KEY_LEFT_SHIFT) g_ShiftPressed = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, GL_TRUE);
+    if (key == GLFW_KEY_P && action == GLFW_PRESS)
+        g_UsePerspectiveProjection = true;
+    if (key == GLFW_KEY_O && action == GLFW_PRESS)
+        g_UsePerspectiveProjection = false;
+    if (key == GLFW_KEY_H && action == GLFW_PRESS)
+        g_ShowInfoText = !g_ShowInfoText;
 
-    if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
-        g_AngleX = 0.0f; g_AngleY = 0.0f; g_AngleZ = 0.0f;
+    if (key == GLFW_KEY_W)
+        g_WPressed = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_S)
+        g_SPressed = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_A)
+        g_APressed = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_D)
+        g_DPressed = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_SPACE)
+        g_SpacePressed = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_LEFT_SHIFT)
+        g_ShiftPressed = (action != GLFW_RELEASE);
+
+    if (key == GLFW_KEY_ENTER && action == GLFW_PRESS)
+    {
+        g_AngleX = 0.0f;
+        g_AngleY = 0.0f;
+        g_AngleZ = 0.0f;
     }
 
-    if (key == GLFW_KEY_L && action == GLFW_PRESS) {
-        printf("\n[LOCALIZACAO] X: %.2f | Y: %.2f | Z: %.2f\n", 
+    if (key == GLFW_KEY_L && action == GLFW_PRESS)
+    {
+        printf("\n[LOCALIZACAO] X: %.2f | Y: %.2f | Z: %.2f\n",
                g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z);
     }
 }
 
-void PushMatrix(glm::mat4 M); 
-void PopMatrix(glm::mat4& M); 
-void BuildTrianglesAndAddToVirtualScene(ObjModel* model, const char* basepath = NULL); 
-void BuildCylinder(); 
-void ComputeNormals(ObjModel* model); 
-void LoadShadersFromFiles(); 
-GLuint LoadTextureImage(const char* filename); 
-void DrawVirtualObject(const char* object_name); 
-GLuint LoadShader_Vertex(const char* filename);   
-GLuint LoadShader_Fragment(const char* filename); 
-void LoadShader(const char* filename, GLuint shader_id); 
-GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id); 
+void PushMatrix(glm::mat4 M);
+void PopMatrix(glm::mat4 &M);
+void BuildTrianglesAndAddToVirtualScene(ObjModel *model, const char *basepath = NULL);
+void BuildCylinder();
+void ComputeNormals(ObjModel *model);
+void LoadShadersFromFiles();
+GLuint LoadTextureImage(const char *filename);
+void DrawVirtualObject(const char *object_name);
+GLuint LoadShader_Vertex(const char *filename);
+GLuint LoadShader_Fragment(const char *filename);
+void LoadShader(const char *filename, GLuint shader_id);
+GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id);
 void TextRendering_Init();
-float TextRendering_LineHeight(GLFWwindow* window);
-float TextRendering_CharWidth(GLFWwindow* window);
-void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float x, float y, float scale = 1.0f);
+float TextRendering_LineHeight(GLFWwindow *window);
+float TextRendering_CharWidth(GLFWwindow *window);
+void TextRendering_PrintString(GLFWwindow *window, const std::string &str, float x, float y, float scale = 1.0f);
 void TextRendering_SetColor(float r, float g, float b);
-void TextRendering_ShowFramesPerSecond(GLFWwindow* window);
+void TextRendering_ShowFramesPerSecond(GLFWwindow *window);
 
 // ============================================================================
 // HUD: shapes 2D coloridas (barras, ícones)
 // ============================================================================
 static GLuint g_HUDProgramID = 0;
 static GLuint g_HUDVAO = 0, g_HUDVBO = 0;
-static GLint  g_HUDColorLoc = -1;
+static GLint g_HUDColorLoc = -1;
 
-static const char* HUD_VS = "#version 330\nlayout(location=0) in vec2 p;\nvoid main(){ gl_Position = vec4(p, 0.0, 1.0); }\n";
-static const char* HUD_FS = "#version 330\nuniform vec4 color;\nout vec4 fc;\nvoid main(){ fc = color; }\n";
+static const char *HUD_VS = "#version 330\nlayout(location=0) in vec2 p;\nvoid main(){ gl_Position = vec4(p, 0.0, 1.0); }\n";
+static const char *HUD_FS = "#version 330\nuniform vec4 color;\nout vec4 fc;\nvoid main(){ fc = color; }\n";
 
-void HUD_Init() {
+void HUD_Init()
+{
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &HUD_VS, NULL); glCompileShader(vs);
+    glShaderSource(vs, 1, &HUD_VS, NULL);
+    glCompileShader(vs);
     GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &HUD_FS, NULL); glCompileShader(fs);
+    glShaderSource(fs, 1, &HUD_FS, NULL);
+    glCompileShader(fs);
     g_HUDProgramID = glCreateProgram();
-    glAttachShader(g_HUDProgramID, vs); glAttachShader(g_HUDProgramID, fs);
+    glAttachShader(g_HUDProgramID, vs);
+    glAttachShader(g_HUDProgramID, fs);
     glLinkProgram(g_HUDProgramID);
-    glDeleteShader(vs); glDeleteShader(fs);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
     g_HUDColorLoc = glGetUniformLocation(g_HUDProgramID, "color");
 
     glGenVertexArrays(1, &g_HUDVAO);
@@ -285,14 +337,21 @@ void HUD_Init() {
 }
 
 // x,y,w,h em coordenadas NDC (-1..1).
-void HUD_DrawRect(float x, float y, float w, float h, float r, float g, float b, float a) {
+void HUD_DrawRect(float x, float y, float w, float h, float r, float g, float b, float a)
+{
     float v[12] = {
-        x,     y,
-        x + w, y,
-        x + w, y + h,
-        x,     y,
-        x + w, y + h,
-        x,     y + h,
+        x,
+        y,
+        x + w,
+        y,
+        x + w,
+        y + h,
+        x,
+        y,
+        x + w,
+        y + h,
+        x,
+        y + h,
     };
     glUseProgram(g_HUDProgramID);
     glUniform4f(g_HUDColorLoc, r, g, b, a);
@@ -305,17 +364,18 @@ void HUD_DrawRect(float x, float y, float w, float h, float r, float g, float b,
 
 // Coração desenhado com retângulos. (cx,cy) é o CENTRO. size = altura visual.
 // O aspect compensa para os pixels parecerem quadrados em NDC.
-void HUD_DrawHeart(float cx, float cy, float size, float aspect, float r, float g, float b) {
+void HUD_DrawHeart(float cx, float cy, float size, float aspect, float r, float g, float b)
+{
     // Estilo "pixel art": dois lóbulos quadrados em cima e um V de retângulos embaixo.
     float h = size;
     float w = h / aspect; // largura igual à altura em pixels
 
     float lobeW = w * 0.45f;
     float lobeH = h * 0.40f;
-    float top   = cy + h * 0.35f;
+    float top = cy + h * 0.35f;
 
     // Lóbulos (cantinhos arredondados ficam fora porque é pixel art)
-    HUD_DrawRect(cx - w * 0.5f,         top - lobeH, lobeW, lobeH, r, g, b, 1.0f);
+    HUD_DrawRect(cx - w * 0.5f, top - lobeH, lobeW, lobeH, r, g, b, 1.0f);
     HUD_DrawRect(cx + w * 0.5f - lobeW, top - lobeH, lobeW, lobeH, r, g, b, 1.0f);
 
     // Faixa central que cobre o vão entre os lóbulos
@@ -326,7 +386,8 @@ void HUD_DrawHeart(float cx, float cy, float size, float aspect, float r, float 
     float startY = top - lobeH - h * 0.05f;
     float totalDown = h * 0.55f;
     float stepH = totalDown / (float)N;
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < N; ++i)
+    {
         float t = (float)(i + 1) / (float)N;
         float ww = w * (1.0f - t);
         HUD_DrawRect(cx - ww * 0.5f, startY - (i + 1) * stepH, ww, stepH + 0.002f, r, g, b, 1.0f);
@@ -336,7 +397,8 @@ void HUD_DrawHeart(float cx, float cy, float size, float aspect, float r, float 
 // ============================================================================
 // SISTEMA DE FÍSICA OTIMIZADO (COLLISION MESH)
 // ============================================================================
-struct MapTriangle {
+struct MapTriangle
+{
     glm::vec3 v0, v1, v2;
     glm::vec3 normal;
     float minX, maxX, minY, maxY, minZ, maxZ;
@@ -344,65 +406,82 @@ struct MapTriangle {
 std::vector<MapTriangle> g_MapTriangles;
 
 // Converte a malha pesada do Obj para um formato super-leve de cálculos de física
-void BuildPhysicsMesh(const ObjModel& model, float scale) {
+void BuildPhysicsMesh(const ObjModel &model, float scale)
+{
     g_MapTriangles.clear();
-    
+
     // Mesmas coordenadas da parede que sumiu
     float delMinX = 1.0f, delMaxX = 3.0f;
     float delMinY = -2.5f, delMaxY = 0.5f;
     float delMinZ = -28.5f, delMaxZ = -27.0f;
 
-
-    for (const auto& shape : model.shapes) {
-        for (size_t f = 0; f < shape.mesh.indices.size() / 3; f++) {
-            tinyobj::index_t i0 = shape.mesh.indices[3*f+0], i1 = shape.mesh.indices[3*f+1], i2 = shape.mesh.indices[3*f+2];
-            glm::vec3 v0(model.attrib.vertices[3*i0.vertex_index+0], model.attrib.vertices[3*i0.vertex_index+1], model.attrib.vertices[3*i0.vertex_index+2]);
-            glm::vec3 v1(model.attrib.vertices[3*i1.vertex_index+0], model.attrib.vertices[3*i1.vertex_index+1], model.attrib.vertices[3*i1.vertex_index+2]);
-            glm::vec3 v2(model.attrib.vertices[3*i2.vertex_index+0], model.attrib.vertices[3*i2.vertex_index+1], model.attrib.vertices[3*i2.vertex_index+2]);
-            v0 *= scale; v1 *= scale; v2 *= scale;
+    for (const auto &shape : model.shapes)
+    {
+        for (size_t f = 0; f < shape.mesh.indices.size() / 3; f++)
+        {
+            tinyobj::index_t i0 = shape.mesh.indices[3 * f + 0], i1 = shape.mesh.indices[3 * f + 1], i2 = shape.mesh.indices[3 * f + 2];
+            glm::vec3 v0(model.attrib.vertices[3 * i0.vertex_index + 0], model.attrib.vertices[3 * i0.vertex_index + 1], model.attrib.vertices[3 * i0.vertex_index + 2]);
+            glm::vec3 v1(model.attrib.vertices[3 * i1.vertex_index + 0], model.attrib.vertices[3 * i1.vertex_index + 1], model.attrib.vertices[3 * i1.vertex_index + 2]);
+            glm::vec3 v2(model.attrib.vertices[3 * i2.vertex_index + 0], model.attrib.vertices[3 * i2.vertex_index + 1], model.attrib.vertices[3 * i2.vertex_index + 2]);
+            v0 *= scale;
+            v1 *= scale;
+            v2 *= scale;
 
             // --- FILTRO DE COLISÃO ---
             bool deletarColisao = false;
             glm::vec3 verts[3] = {v0, v1, v2};
-            for(int v=0; v<3; v++) {
-                if (verts[v].x >= delMinX && verts[v].x <= delMaxX && 
-                    verts[v].y >= delMinY && verts[v].y <= delMaxY && 
-                    verts[v].z >= delMinZ && verts[v].z <= delMaxZ) {
+            for (int v = 0; v < 3; v++)
+            {
+                if (verts[v].x >= delMinX && verts[v].x <= delMaxX &&
+                    verts[v].y >= delMinY && verts[v].y <= delMaxY &&
+                    verts[v].z >= delMinZ && verts[v].z <= delMaxZ)
+                {
                     deletarColisao = true;
                     break;
                 }
             }
-            if(deletarColisao) continue; 
+            if (deletarColisao)
+                continue;
             // -------------------------
 
             glm::vec3 cross = glm::cross(v1 - v0, v2 - v0);
-            if(glm::length(cross) < 0.0001f) continue;
+            if (glm::length(cross) < 0.0001f)
+                continue;
             glm::vec3 normal = glm::normalize(cross);
 
             MapTriangle tri;
-            tri.v0 = v0; tri.v1 = v1; tri.v2 = v2; tri.normal = normal;
-            tri.minX = std::min({v0.x, v1.x, v2.x}); tri.maxX = std::max({v0.x, v1.x, v2.x});
-            tri.minY = std::min({v0.y, v1.y, v2.y}); tri.maxY = std::max({v0.y, v1.y, v2.y});
-            tri.minZ = std::min({v0.z, v1.z, v2.z}); tri.maxZ = std::max({v0.z, v1.z, v2.z});
-            
+            tri.v0 = v0;
+            tri.v1 = v1;
+            tri.v2 = v2;
+            tri.normal = normal;
+            tri.minX = std::min({v0.x, v1.x, v2.x});
+            tri.maxX = std::max({v0.x, v1.x, v2.x});
+            tri.minY = std::min({v0.y, v1.y, v2.y});
+            tri.maxY = std::max({v0.y, v1.y, v2.y});
+            tri.minZ = std::min({v0.z, v1.z, v2.z});
+            tri.maxZ = std::max({v0.z, v1.z, v2.z});
+
             g_MapTriangles.push_back(tri);
         }
     }
     printf("- Malha de Fisica gerada com %lu triangulos.\n", g_MapTriangles.size());
 }
 
-bool CheckAABB(glm::vec3 posA, glm::vec3 sizeA, glm::vec3 posB, glm::vec3 sizeB) {
+bool CheckAABB(glm::vec3 posA, glm::vec3 sizeA, glm::vec3 posB, glm::vec3 sizeB)
+{
     bool collisionX = posA.x + sizeA.x >= posB.x - sizeB.x && posB.x + sizeB.x >= posA.x - sizeA.x;
     bool collisionY = posA.y + sizeA.y >= posB.y - sizeB.y && posB.y + sizeB.y >= posA.y - sizeA.y;
     bool collisionZ = posA.z + sizeA.z >= posB.z - sizeB.z && posB.z + sizeB.z >= posA.z - sizeA.z;
     return collisionX && collisionY && collisionZ;
 }
 
-float PointToSegmentDistance(glm::vec2 p, glm::vec2 a, glm::vec2 b) {
+float PointToSegmentDistance(glm::vec2 p, glm::vec2 a, glm::vec2 b)
+{
     glm::vec2 ab = b - a;
     glm::vec2 ap = p - a;
     float dot_ab_ab = glm::dot(ab, ab);
-    if (dot_ab_ab <= 0.0001f) return glm::length(p - a);
+    if (dot_ab_ab <= 0.0001f)
+        return glm::length(p - a);
     float t = glm::dot(ap, ab) / dot_ab_ab;
     t = std::max(0.0f, std::min(1.0f, t));
     glm::vec2 closest = a + t * ab;
@@ -410,22 +489,29 @@ float PointToSegmentDistance(glm::vec2 p, glm::vec2 a, glm::vec2 b) {
 }
 
 // Scanner OTIMIZADO 60 FPS: Encontra o Chão usando as pré-computações
-float ResolveFloorHeight(float x, float y_current, float z) {
+float ResolveFloorHeight(float x, float y_current, float z)
+{
     float bestY = -9999.0f;
-    for (const auto& tri : g_MapTriangles) {
-        if (tri.normal.y <= 0.5f) continue; // Pula paredes verticais e tetos
-        if (x < tri.minX || x > tri.maxX || z < tri.minZ || z > tri.maxZ) continue; // Pula se estiver longe (Culling O(1))
+    for (const auto &tri : g_MapTriangles)
+    {
+        if (tri.normal.y <= 0.5f)
+            continue; // Pula paredes verticais e tetos
+        if (x < tri.minX || x > tri.maxX || z < tri.minZ || z > tri.maxZ)
+            continue; // Pula se estiver longe (Culling O(1))
 
         float denom = (tri.v1.z - tri.v2.z) * (tri.v0.x - tri.v2.x) + (tri.v2.x - tri.v1.x) * (tri.v0.z - tri.v2.z);
-        if (abs(denom) < 0.0001f) continue;
-        
+        if (abs(denom) < 0.0001f)
+            continue;
+
         float w1 = ((tri.v1.z - tri.v2.z) * (x - tri.v2.x) + (tri.v2.x - tri.v1.x) * (z - tri.v2.z)) / denom;
         float w2 = ((tri.v2.z - tri.v0.z) * (x - tri.v2.x) + (tri.v0.x - tri.v2.x) * (z - tri.v2.z)) / denom;
         float w3 = 1.0f - w1 - w2;
 
-        if (w1 >= -0.01f && w2 >= -0.01f && w3 >= -0.01f) { 
+        if (w1 >= -0.01f && w2 >= -0.01f && w3 >= -0.01f)
+        {
             float hitY = w1 * tri.v0.y + w2 * tri.v1.y + w3 * tri.v2.y;
-            if (hitY > bestY && hitY <= y_current + 1.2f) { // Sobe escadas e rampas
+            if (hitY > bestY && hitY <= y_current + 1.2f)
+            { // Sobe escadas e rampas
                 bestY = hitY;
             }
         }
@@ -434,140 +520,239 @@ float ResolveFloorHeight(float x, float y_current, float z) {
 }
 
 // Scanner OTIMIZADO 60 FPS: Bate em paredes
-bool CheckWallCollision(float x, float y_foot, float z, float radius, float height) {
+bool CheckWallCollision(float x, float y_foot, float z, float radius, float height)
+{
     glm::vec2 p(x, z);
     float margin = radius * 2.0f;
-    
-    for (const auto& tri : g_MapTriangles) {
-        if (abs(tri.normal.y) >= 0.5f) continue; // Pula chão e teto
-        if (y_foot + height < tri.minY || y_foot > tri.maxY) continue; // Pula se estiver alto/baixo demais (Culling)
-        if (x + margin < tri.minX || x - margin > tri.maxX || z + margin < tri.minZ || z - margin > tri.maxZ) continue; 
+
+    for (const auto &tri : g_MapTriangles)
+    {
+        if (abs(tri.normal.y) >= 0.5f)
+            continue; // Pula chão e teto
+        if (y_foot + height < tri.minY || y_foot > tri.maxY)
+            continue; // Pula se estiver alto/baixo demais (Culling)
+        if (x + margin < tri.minX || x - margin > tri.maxX || z + margin < tri.minZ || z - margin > tri.maxZ)
+            continue;
 
         if (PointToSegmentDistance(p, glm::vec2(tri.v0.x, tri.v0.z), glm::vec2(tri.v1.x, tri.v1.z)) < radius ||
             PointToSegmentDistance(p, glm::vec2(tri.v1.x, tri.v1.z), glm::vec2(tri.v2.x, tri.v2.z)) < radius ||
-            PointToSegmentDistance(p, glm::vec2(tri.v2.x, tri.v2.z), glm::vec2(tri.v0.x, tri.v0.z)) < radius) {
-            return true; 
+            PointToSegmentDistance(p, glm::vec2(tri.v2.x, tri.v2.z), glm::vec2(tri.v0.x, tri.v0.z)) < radius)
+        {
+            return true;
         }
     }
     return false;
 }
 
-// Verifica colisão do Jogador com Caixas 
-bool CheckEntityCollision(glm::vec3 nextPos, float playerRadius, float playerHeight) {
-    glm::vec3 pSize(playerRadius, playerHeight/2.0f, playerRadius);
-    glm::vec3 pPos(nextPos.x, nextPos.y - playerHeight/2.0f, nextPos.z);
+// Verifica colisão do Jogador com Caixas
+// Verifica colisão do Jogador com Caixas e Coleta Itens
+bool CheckEntityCollision(glm::vec3 nextPos, float playerRadius, float playerHeight)
+{
+    glm::vec3 pSize(playerRadius, playerHeight / 2.0f, playerRadius);
+    glm::vec3 pPos(nextPos.x, nextPos.y - playerHeight / 2.0f, nextPos.z);
 
-    for (const auto& ent : mapEntities) {
-        if (ent.type != 0 && ent.type != PORTAL && ent.type != ALIEN) { 
-            glm::vec3 eSize(0.3f, 0.8f, 0.3f);
-            if (ent.type == BOX) eSize = glm::vec3(0.5f, 0.5f, 0.5f);
-            glm::vec3 ePos(ent.x, ent.y + eSize.y, ent.z); 
+    for (auto &ent : mapEntities)
+    {
+        if (ent.type == 0 || ent.type == PORTAL || ent.type == ALIEN)
+            continue;
 
-            if (CheckAABB(pPos, pSize, ePos, eSize)) return true;
+        glm::vec3 eSize(0.3f, 0.8f, 0.3f);
+        if (ent.type == BOX)
+            eSize = glm::vec3(0.5f, 0.5f, 0.5f);
+        else if (ent.type == AMMO_BOX || ent.type == HEALTH_BOX)
+            eSize = glm::vec3(ent.scale, ent.scale, ent.scale);
+
+        glm::vec3 ePos(ent.x, ent.y + eSize.y, ent.z);
+
+        if (CheckAABB(pPos, pSize, ePos, eSize))
+        {
+            // --- LÓGICA DE COLETA DE ITENS ---
+            if (ent.type == AMMO_BOX)
+            {
+                if (g_PlayerAmmo < g_PlayerMaxAmmo)
+                {
+                    g_PlayerAmmo += 15; // Ganha 15 tiros
+                    if (g_PlayerAmmo > g_PlayerMaxAmmo)
+                        g_PlayerAmmo = g_PlayerMaxAmmo;
+                    ent.type = 0; // Remove a caixa do mapa
+                    printf("Pegou Municao! Total: %d\n", g_PlayerAmmo);
+                }
+                return false; // Permite atravessar o item coletado
+            }
+            else if (ent.type == HEALTH_BOX)
+            {
+                if (g_PlayerHP < g_PlayerMaxHP)
+                {
+                    g_PlayerHP += 30; // Ganha 30 HP
+                    if (g_PlayerHP > g_PlayerMaxHP)
+                        g_PlayerHP = g_PlayerMaxHP;
+                    ent.type = 0; // Remove a caixa do mapa
+                    printf("Pegou Vida! HP: %d\n", g_PlayerHP);
+                }
+                return false; // Permite atravessar o item coletado
+            }
+
+            // Se for uma BOX comum, bloqueia o movimento
+            return true;
         }
     }
     return false;
 }
 
 // ============================================================================
-void DrawModel(ObjModel* model) {
-    for (size_t i = 0; i < model->shapes.size(); ++i) {
+void DrawModel(ObjModel *model)
+{
+    for (size_t i = 0; i < model->shapes.size(); ++i)
+    {
         std::string unique_name = model->shapes[i].name + "_" + std::to_string(i);
         DrawVirtualObject(unique_name.c_str());
     }
 }
 
-void FramebufferSizeCallback(GLFWwindow* window, int width, int height) {
-    glViewport(0, 0, width, height); g_ScreenRatio = (float)width / height;
+void FramebufferSizeCallback(GLFWwindow *window, int width, int height)
+{
+    glViewport(0, 0, width, height);
+    g_ScreenRatio = (float)width / height;
 }
 
-GLuint LoadTextureImage(const char* filename) {
-    if (g_TextureCache.find(filename) != g_TextureCache.end()) return g_TextureCache[filename];
+GLuint LoadTextureImage(const char *filename)
+{
+    if (g_TextureCache.find(filename) != g_TextureCache.end())
+        return g_TextureCache[filename];
     stbi_set_flip_vertically_on_load(true);
     int width, height, channels;
     unsigned char *data = stbi_load(filename, &width, &height, &channels, 3);
-    if ( data == NULL ) { return 0; }
-    GLuint texture_id; glGenTextures(1, &texture_id); glBindTexture(GL_TEXTURE_2D, texture_id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    if (data == NULL)
+    {
+        return 0;
+    }
+    GLuint texture_id;
+    glGenTextures(1, &texture_id);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-    glGenerateMipmap(GL_TEXTURE_2D); stbi_image_free(data); g_TextureCache[filename] = texture_id; 
+    glGenerateMipmap(GL_TEXTURE_2D);
+    stbi_image_free(data);
+    g_TextureCache[filename] = texture_id;
     return texture_id;
 }
 
-void DrawVirtualObject(const char* object_name) {
-    if (g_VirtualScene.find(object_name) == g_VirtualScene.end()) return; 
+void DrawVirtualObject(const char *object_name)
+{
+    if (g_VirtualScene.find(object_name) == g_VirtualScene.end())
+        return;
     GLuint tex_id = g_VirtualScene[object_name].texture_id;
-    if (tex_id == 0) tex_id = g_DefaultTexture; 
-    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, tex_id);
+    if (tex_id == 0)
+        tex_id = g_DefaultTexture;
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex_id);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage"), 0);
     glBindVertexArray(g_VirtualScene[object_name].vertex_array_object_id);
-    glm::vec3 bbox_min = g_VirtualScene[object_name].bbox_min; glm::vec3 bbox_max = g_VirtualScene[object_name].bbox_max;
-    glUniform4f(g_bbox_min_uniform, bbox_min.x, bbox_min.y, bbox_min.z, 1.0f); glUniform4f(g_bbox_max_uniform, bbox_max.x, bbox_max.y, bbox_max.z, 1.0f);
-    glDrawElements(g_VirtualScene[object_name].rendering_mode, g_VirtualScene[object_name].num_indices, GL_UNSIGNED_INT, (void*)(g_VirtualScene[object_name].first_index * sizeof(GLuint)));
+    glm::vec3 bbox_min = g_VirtualScene[object_name].bbox_min;
+    glm::vec3 bbox_max = g_VirtualScene[object_name].bbox_max;
+    glUniform4f(g_bbox_min_uniform, bbox_min.x, bbox_min.y, bbox_min.z, 1.0f);
+    glUniform4f(g_bbox_max_uniform, bbox_max.x, bbox_max.y, bbox_max.z, 1.0f);
+    glDrawElements(g_VirtualScene[object_name].rendering_mode, g_VirtualScene[object_name].num_indices, GL_UNSIGNED_INT, (void *)(g_VirtualScene[object_name].first_index * sizeof(GLuint)));
     glBindVertexArray(0);
 }
 
-void LoadShadersFromFiles() {
+void LoadShadersFromFiles()
+{
     GLuint vertex_shader_id = LoadShader_Vertex("../../src/shader_vertex.glsl");
     GLuint fragment_shader_id = LoadShader_Fragment("../../src/shader_fragment.glsl");
-    if ( g_GpuProgramID != 0 ) glDeleteProgram(g_GpuProgramID);
+    if (g_GpuProgramID != 0)
+        glDeleteProgram(g_GpuProgramID);
     g_GpuProgramID = CreateGpuProgram(vertex_shader_id, fragment_shader_id);
-    g_model_uniform      = glGetUniformLocation(g_GpuProgramID, "model"); g_view_uniform       = glGetUniformLocation(g_GpuProgramID, "view"); 
-    g_projection_uniform = glGetUniformLocation(g_GpuProgramID, "projection"); g_object_id_uniform  = glGetUniformLocation(g_GpuProgramID, "object_id"); 
-    g_bbox_min_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_min"); g_bbox_max_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_max");
-    g_hit_flash_uniform  = glGetUniformLocation(g_GpuProgramID, "hit_flash");
-    glUseProgram(g_GpuProgramID); glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage0"), 0);
+    g_model_uniform = glGetUniformLocation(g_GpuProgramID, "model");
+    g_view_uniform = glGetUniformLocation(g_GpuProgramID, "view");
+    g_projection_uniform = glGetUniformLocation(g_GpuProgramID, "projection");
+    g_object_id_uniform = glGetUniformLocation(g_GpuProgramID, "object_id");
+    g_bbox_min_uniform = glGetUniformLocation(g_GpuProgramID, "bbox_min");
+    g_bbox_max_uniform = glGetUniformLocation(g_GpuProgramID, "bbox_max");
+    g_hit_flash_uniform = glGetUniformLocation(g_GpuProgramID, "hit_flash");
+    glUseProgram(g_GpuProgramID);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage0"), 0);
     glUseProgram(0);
 }
 
-void ComputeNormals(ObjModel* model) {
-    if ( !model->attrib.normals.empty() ) return;
+void ComputeNormals(ObjModel *model)
+{
+    if (!model->attrib.normals.empty())
+        return;
     std::set<unsigned int> sgroup_ids;
-    for (size_t shape = 0; shape < model->shapes.size(); ++shape) {
+    for (size_t shape = 0; shape < model->shapes.size(); ++shape)
+    {
         size_t num_triangles = model->shapes[shape].mesh.num_face_vertices.size();
-        for (size_t triangle = 0; triangle < num_triangles; ++triangle) sgroup_ids.insert(model->shapes[shape].mesh.smoothing_group_ids[triangle]);
+        for (size_t triangle = 0; triangle < num_triangles; ++triangle)
+            sgroup_ids.insert(model->shapes[shape].mesh.smoothing_group_ids[triangle]);
     }
-    size_t num_vertices = model->attrib.vertices.size() / 3; model->attrib.normals.reserve( 3*num_vertices );
-    for (const unsigned int & sgroup : sgroup_ids) {
-        std::vector<int> num_triangles_per_vertex(num_vertices, 0); std::vector<glm::vec4> vertex_normals(num_vertices, glm::vec4(0.0f,0.0f,0.0f,0.0f));
-        for (size_t shape = 0; shape < model->shapes.size(); ++shape) {
+    size_t num_vertices = model->attrib.vertices.size() / 3;
+    model->attrib.normals.reserve(3 * num_vertices);
+    for (const unsigned int &sgroup : sgroup_ids)
+    {
+        std::vector<int> num_triangles_per_vertex(num_vertices, 0);
+        std::vector<glm::vec4> vertex_normals(num_vertices, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
+        for (size_t shape = 0; shape < model->shapes.size(); ++shape)
+        {
             size_t num_triangles = model->shapes[shape].mesh.num_face_vertices.size();
-            for (size_t triangle = 0; triangle < num_triangles; ++triangle) {
-                if (model->shapes[shape].mesh.smoothing_group_ids[triangle] != sgroup) continue;
-                glm::vec4  vertices[3];
-                for (size_t vertex = 0; vertex < 3; ++vertex) {
-                    tinyobj::index_t idx = model->shapes[shape].mesh.indices[3*triangle + vertex];
-                    vertices[vertex] = glm::vec4(model->attrib.vertices[3*idx.vertex_index+0], model->attrib.vertices[3*idx.vertex_index+1], model->attrib.vertices[3*idx.vertex_index+2], 1.0);
+            for (size_t triangle = 0; triangle < num_triangles; ++triangle)
+            {
+                if (model->shapes[shape].mesh.smoothing_group_ids[triangle] != sgroup)
+                    continue;
+                glm::vec4 vertices[3];
+                for (size_t vertex = 0; vertex < 3; ++vertex)
+                {
+                    tinyobj::index_t idx = model->shapes[shape].mesh.indices[3 * triangle + vertex];
+                    vertices[vertex] = glm::vec4(model->attrib.vertices[3 * idx.vertex_index + 0], model->attrib.vertices[3 * idx.vertex_index + 1], model->attrib.vertices[3 * idx.vertex_index + 2], 1.0);
                 }
-                const glm::vec4 n = crossproduct(vertices[1]-vertices[0], vertices[2]-vertices[0]);
-                for (size_t vertex = 0; vertex < 3; ++vertex) {
-                    tinyobj::index_t idx = model->shapes[shape].mesh.indices[3*triangle + vertex];
-                    num_triangles_per_vertex[idx.vertex_index] += 1; vertex_normals[idx.vertex_index] += n;
+                const glm::vec4 n = crossproduct(vertices[1] - vertices[0], vertices[2] - vertices[0]);
+                for (size_t vertex = 0; vertex < 3; ++vertex)
+                {
+                    tinyobj::index_t idx = model->shapes[shape].mesh.indices[3 * triangle + vertex];
+                    num_triangles_per_vertex[idx.vertex_index] += 1;
+                    vertex_normals[idx.vertex_index] += n;
                 }
             }
         }
         std::vector<size_t> normal_indices(num_vertices, 0);
-        for (size_t i = 0; i < vertex_normals.size(); ++i) {
-            if (num_triangles_per_vertex[i] == 0) continue;
-            glm::vec4 n = vertex_normals[i] / (float)num_triangles_per_vertex[i]; n /= norm(n);
-            model->attrib.normals.push_back(n.x); model->attrib.normals.push_back(n.y); model->attrib.normals.push_back(n.z);
+        for (size_t i = 0; i < vertex_normals.size(); ++i)
+        {
+            if (num_triangles_per_vertex[i] == 0)
+                continue;
+            glm::vec4 n = vertex_normals[i] / (float)num_triangles_per_vertex[i];
+            n /= norm(n);
+            model->attrib.normals.push_back(n.x);
+            model->attrib.normals.push_back(n.y);
+            model->attrib.normals.push_back(n.z);
             normal_indices[i] = (model->attrib.normals.size() / 3) - 1;
         }
-        for (size_t shape = 0; shape < model->shapes.size(); ++shape) {
+        for (size_t shape = 0; shape < model->shapes.size(); ++shape)
+        {
             size_t num_triangles = model->shapes[shape].mesh.num_face_vertices.size();
-            for (size_t triangle = 0; triangle < num_triangles; ++triangle) {
-                if (model->shapes[shape].mesh.smoothing_group_ids[triangle] != sgroup) continue;
-                for (size_t vertex = 0; vertex < 3; ++vertex) model->shapes[shape].mesh.indices[3*triangle + vertex].normal_index = normal_indices[model->shapes[shape].mesh.indices[3*triangle + vertex].vertex_index];
+            for (size_t triangle = 0; triangle < num_triangles; ++triangle)
+            {
+                if (model->shapes[shape].mesh.smoothing_group_ids[triangle] != sgroup)
+                    continue;
+                for (size_t vertex = 0; vertex < 3; ++vertex)
+                    model->shapes[shape].mesh.indices[3 * triangle + vertex].normal_index = normal_indices[model->shapes[shape].mesh.indices[3 * triangle + vertex].vertex_index];
             }
         }
     }
 }
 
-void BuildTrianglesAndAddToVirtualScene(ObjModel* model, const char* basepath) {
-    GLuint vertex_array_object_id; glGenVertexArrays(1, &vertex_array_object_id); glBindVertexArray(vertex_array_object_id);
-    std::vector<GLuint> indices; std::vector<float>  model_coefficients; std::vector<float>  normal_coefficients; std::vector<float>  texture_coefficients;
-    
+void BuildTrianglesAndAddToVirtualScene(ObjModel *model, const char *basepath)
+{
+    GLuint vertex_array_object_id;
+    glGenVertexArrays(1, &vertex_array_object_id);
+    glBindVertexArray(vertex_array_object_id);
+    std::vector<GLuint> indices;
+    std::vector<float> model_coefficients;
+    std::vector<float> normal_coefficients;
+    std::vector<float> texture_coefficients;
+
     // Coordenadas passadas para deletar a parede:
     // [LOCALIZACAO] X: 1.29 | Y: -2.05 | Z: -27.43
     // [LOCALIZACAO] X: 2.70 | Y: 0.05 | Z: -23.44
@@ -576,159 +761,326 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model, const char* basepath) {
     float delMinY = -2.5f, delMaxY = 0.5f;
     float delMinZ = -28.5f, delMaxZ = -27.0f;
 
-    for (size_t shape = 0; shape < model->shapes.size(); ++shape) {
-        size_t first_index = indices.size(); size_t num_triangles = model->shapes[shape].mesh.num_face_vertices.size();
-        glm::vec3 bbox_min = glm::vec3(std::numeric_limits<float>::max()); glm::vec3 bbox_max = glm::vec3(std::numeric_limits<float>::min());
-        
-        for (size_t triangle = 0; triangle < num_triangles; ++triangle) {
-            
+    for (size_t shape = 0; shape < model->shapes.size(); ++shape)
+    {
+        size_t first_index = indices.size();
+        size_t num_triangles = model->shapes[shape].mesh.num_face_vertices.size();
+        glm::vec3 bbox_min = glm::vec3(std::numeric_limits<float>::max());
+        glm::vec3 bbox_max = glm::vec3(std::numeric_limits<float>::min());
+
+        for (size_t triangle = 0; triangle < num_triangles; ++triangle)
+        {
+
             // --- NOVO: FILTRO PARA DELETAR A PAREDE ---
             bool deletarTriangulo = false;
-            for(size_t v_test = 0; v_test < 3; ++v_test) {
-                tinyobj::index_t idx_test = model->shapes[shape].mesh.indices[3*triangle + v_test];
-                float test_x = model->attrib.vertices[3*idx_test.vertex_index + 0] * g_MapScale;
-                float test_y = model->attrib.vertices[3*idx_test.vertex_index + 1] * g_MapScale;
-                float test_z = model->attrib.vertices[3*idx_test.vertex_index + 2] * g_MapScale;
+            for (size_t v_test = 0; v_test < 3; ++v_test)
+            {
+                tinyobj::index_t idx_test = model->shapes[shape].mesh.indices[3 * triangle + v_test];
+                float test_x = model->attrib.vertices[3 * idx_test.vertex_index + 0] * g_MapScale;
+                float test_y = model->attrib.vertices[3 * idx_test.vertex_index + 1] * g_MapScale;
+                float test_z = model->attrib.vertices[3 * idx_test.vertex_index + 2] * g_MapScale;
 
-                if (test_x >= delMinX && test_x <= delMaxX && 
-                    test_y >= delMinY && test_y <= delMaxY && 
-                    test_z >= delMinZ && test_z <= delMaxZ) {
+                if (test_x >= delMinX && test_x <= delMaxX &&
+                    test_y >= delMinY && test_y <= delMaxY &&
+                    test_z >= delMinZ && test_z <= delMaxZ)
+                {
                     deletarTriangulo = true;
                     break;
                 }
             }
-            if(deletarTriangulo) continue; // Pula este triângulo, abrindo um buraco no mapa visual!
+            if (deletarTriangulo)
+                continue; // Pula este triângulo, abrindo um buraco no mapa visual!
             // ------------------------------------------
 
-            for (size_t vertex = 0; vertex < 3; ++vertex) {
-                tinyobj::index_t idx = model->shapes[shape].mesh.indices[3*triangle + vertex];
-                
+            for (size_t vertex = 0; vertex < 3; ++vertex)
+            {
+                tinyobj::index_t idx = model->shapes[shape].mesh.indices[3 * triangle + vertex];
+
                 // Em vez de adicionar direto, precisamos criar os índices sequencialmente baseados no que sobrou
                 // Para não quebrar a ordem do OpenGL, adicionamos "vértices unrolled" (duplicando dados, mas é seguro)
                 size_t current_vertex = model_coefficients.size() / 4;
                 indices.push_back(current_vertex);
 
-                float vx = model->attrib.vertices[3*idx.vertex_index + 0]; float vy = model->attrib.vertices[3*idx.vertex_index + 1]; float vz = model->attrib.vertices[3*idx.vertex_index + 2];
-                model_coefficients.push_back(vx); model_coefficients.push_back(vy); model_coefficients.push_back(vz); model_coefficients.push_back(1.0f);
-                bbox_min.x = std::min(bbox_min.x, vx); bbox_min.y = std::min(bbox_min.y, vy); bbox_min.z = std::min(bbox_min.z, vz);
-                bbox_max.x = std::max(bbox_max.x, vx); bbox_max.y = std::max(bbox_max.y, vy); bbox_max.z = std::max(bbox_max.z, vz);
-                if ( idx.normal_index != -1 ) { normal_coefficients.push_back(model->attrib.normals[3*idx.normal_index + 0]); normal_coefficients.push_back(model->attrib.normals[3*idx.normal_index + 1]); normal_coefficients.push_back(model->attrib.normals[3*idx.normal_index + 2]); normal_coefficients.push_back(0.0f); }
-                if ( idx.texcoord_index != -1 ) { texture_coefficients.push_back(model->attrib.texcoords[2*idx.texcoord_index + 0]); texture_coefficients.push_back(model->attrib.texcoords[2*idx.texcoord_index + 1]); }
+                float vx = model->attrib.vertices[3 * idx.vertex_index + 0];
+                float vy = model->attrib.vertices[3 * idx.vertex_index + 1];
+                float vz = model->attrib.vertices[3 * idx.vertex_index + 2];
+                model_coefficients.push_back(vx);
+                model_coefficients.push_back(vy);
+                model_coefficients.push_back(vz);
+                model_coefficients.push_back(1.0f);
+                bbox_min.x = std::min(bbox_min.x, vx);
+                bbox_min.y = std::min(bbox_min.y, vy);
+                bbox_min.z = std::min(bbox_min.z, vz);
+                bbox_max.x = std::max(bbox_max.x, vx);
+                bbox_max.y = std::max(bbox_max.y, vy);
+                bbox_max.z = std::max(bbox_max.z, vz);
+                if (idx.normal_index != -1)
+                {
+                    normal_coefficients.push_back(model->attrib.normals[3 * idx.normal_index + 0]);
+                    normal_coefficients.push_back(model->attrib.normals[3 * idx.normal_index + 1]);
+                    normal_coefficients.push_back(model->attrib.normals[3 * idx.normal_index + 2]);
+                    normal_coefficients.push_back(0.0f);
+                }
+                if (idx.texcoord_index != -1)
+                {
+                    texture_coefficients.push_back(model->attrib.texcoords[2 * idx.texcoord_index + 0]);
+                    texture_coefficients.push_back(model->attrib.texcoords[2 * idx.texcoord_index + 1]);
+                }
             }
         }
-        
+
         // Se a malha inteira foi deletada e sobrou com 0 polígonos, não criamos objeto
-        if(indices.size() == first_index) continue;
+        if (indices.size() == first_index)
+            continue;
 
         std::string unique_name = model->shapes[shape].name + "_" + std::to_string(shape);
         GLuint shape_texture_id = 0;
-        if (basepath != NULL && !model->materials.empty() && !model->shapes[shape].mesh.material_ids.empty()) {
+        if (basepath != NULL && !model->materials.empty() && !model->shapes[shape].mesh.material_ids.empty())
+        {
             int mat_id = model->shapes[shape].mesh.material_ids[0];
-            if (mat_id >= 0 && mat_id < model->materials.size() && !model->materials[mat_id].diffuse_texname.empty()) {
+            if (mat_id >= 0 && mat_id < model->materials.size() && !model->materials[mat_id].diffuse_texname.empty())
+            {
                 std::string fullpath = std::string(basepath) + model->materials[mat_id].diffuse_texname;
                 shape_texture_id = LoadTextureImage(fullpath.c_str());
             }
         }
-        SceneObject theobject; theobject.name = unique_name; theobject.first_index = first_index; theobject.num_indices = indices.size() - first_index; theobject.rendering_mode = GL_TRIANGLES;       
-        theobject.vertex_array_object_id = vertex_array_object_id; theobject.bbox_min = bbox_min; theobject.bbox_max = bbox_max; theobject.texture_id = shape_texture_id; g_VirtualScene[unique_name] = theobject;
+        SceneObject theobject;
+        theobject.name = unique_name;
+        theobject.first_index = first_index;
+        theobject.num_indices = indices.size() - first_index;
+        theobject.rendering_mode = GL_TRIANGLES;
+        theobject.vertex_array_object_id = vertex_array_object_id;
+        theobject.bbox_min = bbox_min;
+        theobject.bbox_max = bbox_max;
+        theobject.texture_id = shape_texture_id;
+        g_VirtualScene[unique_name] = theobject;
     }
-    GLuint VBO_model_coefficients_id; glGenBuffers(1, &VBO_model_coefficients_id); glBindBuffer(GL_ARRAY_BUFFER, VBO_model_coefficients_id); glBufferData(GL_ARRAY_BUFFER, model_coefficients.size() * sizeof(float), model_coefficients.data(), GL_STATIC_DRAW); glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0); glEnableVertexAttribArray(0);
-    if ( !normal_coefficients.empty() ) { GLuint VBO_normal_coefficients_id; glGenBuffers(1, &VBO_normal_coefficients_id); glBindBuffer(GL_ARRAY_BUFFER, VBO_normal_coefficients_id); glBufferData(GL_ARRAY_BUFFER, normal_coefficients.size() * sizeof(float), normal_coefficients.data(), GL_STATIC_DRAW); glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0); glEnableVertexAttribArray(1); }
-    if ( !texture_coefficients.empty() ) { GLuint VBO_texture_coefficients_id; glGenBuffers(1, &VBO_texture_coefficients_id); glBindBuffer(GL_ARRAY_BUFFER, VBO_texture_coefficients_id); glBufferData(GL_ARRAY_BUFFER, texture_coefficients.size() * sizeof(float), texture_coefficients.data(), GL_STATIC_DRAW); glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0); glEnableVertexAttribArray(2); }
-    GLuint indices_id; glGenBuffers(1, &indices_id); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_id); glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW); glBindVertexArray(0);
+    GLuint VBO_model_coefficients_id;
+    glGenBuffers(1, &VBO_model_coefficients_id);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_model_coefficients_id);
+    glBufferData(GL_ARRAY_BUFFER, model_coefficients.size() * sizeof(float), model_coefficients.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+    if (!normal_coefficients.empty())
+    {
+        GLuint VBO_normal_coefficients_id;
+        glGenBuffers(1, &VBO_normal_coefficients_id);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_normal_coefficients_id);
+        glBufferData(GL_ARRAY_BUFFER, normal_coefficients.size() * sizeof(float), normal_coefficients.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray(1);
+    }
+    if (!texture_coefficients.empty())
+    {
+        GLuint VBO_texture_coefficients_id;
+        glGenBuffers(1, &VBO_texture_coefficients_id);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_texture_coefficients_id);
+        glBufferData(GL_ARRAY_BUFFER, texture_coefficients.size() * sizeof(float), texture_coefficients.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray(2);
+    }
+    GLuint indices_id;
+    glGenBuffers(1, &indices_id);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_id);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+    glBindVertexArray(0);
 }
 
-void BuildCylinder() {
-    std::vector<float>  model_coefficients; std::vector<float>  normal_coefficients; std::vector<float>  texture_coefficients; std::vector<GLuint> indices;
-    int sectors = 16; float radius = 1.0f; float height = 1.0f;
-    for(int i = 0; i <= sectors; ++i) {
-        float theta = 2.0f * 3.14159265359f * float(i) / float(sectors); float cx = radius * cos(theta); float cy = radius * sin(theta);
-        model_coefficients.push_back(cx); model_coefficients.push_back(cy); model_coefficients.push_back(height/2.0f); model_coefficients.push_back(1.0f);
-        normal_coefficients.push_back(cx/radius); normal_coefficients.push_back(cy/radius); normal_coefficients.push_back(0.0f); normal_coefficients.push_back(0.0f);
-        texture_coefficients.push_back(float(i)/sectors); texture_coefficients.push_back(1.0f);
-        model_coefficients.push_back(cx); model_coefficients.push_back(cy); model_coefficients.push_back(-height/2.0f); model_coefficients.push_back(1.0f);
-        normal_coefficients.push_back(cx/radius); normal_coefficients.push_back(cy/radius); normal_coefficients.push_back(0.0f); normal_coefficients.push_back(0.0f);
-        texture_coefficients.push_back(float(i)/sectors); texture_coefficients.push_back(0.0f);
+void BuildCylinder()
+{
+    std::vector<float> model_coefficients;
+    std::vector<float> normal_coefficients;
+    std::vector<float> texture_coefficients;
+    std::vector<GLuint> indices;
+    int sectors = 16;
+    float radius = 1.0f;
+    float height = 1.0f;
+    for (int i = 0; i <= sectors; ++i)
+    {
+        float theta = 2.0f * 3.14159265359f * float(i) / float(sectors);
+        float cx = radius * cos(theta);
+        float cy = radius * sin(theta);
+        model_coefficients.push_back(cx);
+        model_coefficients.push_back(cy);
+        model_coefficients.push_back(height / 2.0f);
+        model_coefficients.push_back(1.0f);
+        normal_coefficients.push_back(cx / radius);
+        normal_coefficients.push_back(cy / radius);
+        normal_coefficients.push_back(0.0f);
+        normal_coefficients.push_back(0.0f);
+        texture_coefficients.push_back(float(i) / sectors);
+        texture_coefficients.push_back(1.0f);
+        model_coefficients.push_back(cx);
+        model_coefficients.push_back(cy);
+        model_coefficients.push_back(-height / 2.0f);
+        model_coefficients.push_back(1.0f);
+        normal_coefficients.push_back(cx / radius);
+        normal_coefficients.push_back(cy / radius);
+        normal_coefficients.push_back(0.0f);
+        normal_coefficients.push_back(0.0f);
+        texture_coefficients.push_back(float(i) / sectors);
+        texture_coefficients.push_back(0.0f);
     }
-    for(int i = 0; i < sectors; ++i) {
-        GLuint front1 = i * 2, back1  = i * 2 + 1, front2 = (i + 1) * 2, back2  = (i + 1) * 2 + 1;
-        indices.push_back(front1); indices.push_back(back1); indices.push_back(front2); indices.push_back(back1);  indices.push_back(back2); indices.push_back(front2);
+    for (int i = 0; i < sectors; ++i)
+    {
+        GLuint front1 = i * 2, back1 = i * 2 + 1, front2 = (i + 1) * 2, back2 = (i + 1) * 2 + 1;
+        indices.push_back(front1);
+        indices.push_back(back1);
+        indices.push_back(front2);
+        indices.push_back(back1);
+        indices.push_back(back2);
+        indices.push_back(front2);
     }
-    GLuint vertex_array_object_id; glGenVertexArrays(1, &vertex_array_object_id); glBindVertexArray(vertex_array_object_id);
-    GLuint VBO_model_coefficients_id; glGenBuffers(1, &VBO_model_coefficients_id); glBindBuffer(GL_ARRAY_BUFFER, VBO_model_coefficients_id); glBufferData(GL_ARRAY_BUFFER, model_coefficients.size() * sizeof(float), model_coefficients.data(), GL_STATIC_DRAW); glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0); glEnableVertexAttribArray(0);
-    GLuint VBO_normal_coefficients_id; glGenBuffers(1, &VBO_normal_coefficients_id); glBindBuffer(GL_ARRAY_BUFFER, VBO_normal_coefficients_id); glBufferData(GL_ARRAY_BUFFER, normal_coefficients.size() * sizeof(float), normal_coefficients.data(), GL_STATIC_DRAW); glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0); glEnableVertexAttribArray(1);
-    GLuint VBO_texture_coefficients_id; glGenBuffers(1, &VBO_texture_coefficients_id); glBindBuffer(GL_ARRAY_BUFFER, VBO_texture_coefficients_id); glBufferData(GL_ARRAY_BUFFER, texture_coefficients.size() * sizeof(float), texture_coefficients.data(), GL_STATIC_DRAW); glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0); glEnableVertexAttribArray(2);
-    GLuint indices_id; glGenBuffers(1, &indices_id); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_id); glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW); glBindVertexArray(0);
-    SceneObject theobject; theobject.name = "laser_cylinder"; theobject.first_index = 0; theobject.num_indices = indices.size(); theobject.rendering_mode = GL_TRIANGLES; theobject.vertex_array_object_id = vertex_array_object_id; theobject.bbox_min = glm::vec3(-radius, -radius, -height/2); theobject.bbox_max = glm::vec3(radius, radius, height/2); theobject.texture_id = 0; g_VirtualScene["laser_cylinder"] = theobject;
+    GLuint vertex_array_object_id;
+    glGenVertexArrays(1, &vertex_array_object_id);
+    glBindVertexArray(vertex_array_object_id);
+    GLuint VBO_model_coefficients_id;
+    glGenBuffers(1, &VBO_model_coefficients_id);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_model_coefficients_id);
+    glBufferData(GL_ARRAY_BUFFER, model_coefficients.size() * sizeof(float), model_coefficients.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+    GLuint VBO_normal_coefficients_id;
+    glGenBuffers(1, &VBO_normal_coefficients_id);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_normal_coefficients_id);
+    glBufferData(GL_ARRAY_BUFFER, normal_coefficients.size() * sizeof(float), normal_coefficients.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(1);
+    GLuint VBO_texture_coefficients_id;
+    glGenBuffers(1, &VBO_texture_coefficients_id);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_texture_coefficients_id);
+    glBufferData(GL_ARRAY_BUFFER, texture_coefficients.size() * sizeof(float), texture_coefficients.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(2);
+    GLuint indices_id;
+    glGenBuffers(1, &indices_id);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_id);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+    glBindVertexArray(0);
+    SceneObject theobject;
+    theobject.name = "laser_cylinder";
+    theobject.first_index = 0;
+    theobject.num_indices = indices.size();
+    theobject.rendering_mode = GL_TRIANGLES;
+    theobject.vertex_array_object_id = vertex_array_object_id;
+    theobject.bbox_min = glm::vec3(-radius, -radius, -height / 2);
+    theobject.bbox_max = glm::vec3(radius, radius, height / 2);
+    theobject.texture_id = 0;
+    g_VirtualScene["laser_cylinder"] = theobject;
 }
 
-GLuint LoadShader_Vertex(const char* filename) { GLuint v = glCreateShader(GL_VERTEX_SHADER); LoadShader(filename, v); return v; }
-GLuint LoadShader_Fragment(const char* filename) { GLuint f = glCreateShader(GL_FRAGMENT_SHADER); LoadShader(filename, f); return f; }
-void LoadShader(const char* filename, GLuint shader_id) {
+GLuint LoadShader_Vertex(const char *filename)
+{
+    GLuint v = glCreateShader(GL_VERTEX_SHADER);
+    LoadShader(filename, v);
+    return v;
+}
+GLuint LoadShader_Fragment(const char *filename)
+{
+    GLuint f = glCreateShader(GL_FRAGMENT_SHADER);
+    LoadShader(filename, f);
+    return f;
+}
+void LoadShader(const char *filename, GLuint shader_id)
+{
     std::ifstream file;
-    try { file.exceptions(std::ifstream::failbit); file.open(filename); } 
-    catch ( std::exception& e ) { fprintf(stderr, "ERROR: Cannot open file \"%s\".\n", filename); std::exit(EXIT_FAILURE); }
-    std::stringstream shader; shader << file.rdbuf(); std::string str = shader.str();
-    const GLchar* shader_string = str.c_str(); const GLint length = static_cast<GLint>(str.length());
-    glShaderSource(shader_id, 1, &shader_string, &length); glCompileShader(shader_id);
+    try
+    {
+        file.exceptions(std::ifstream::failbit);
+        file.open(filename);
+    }
+    catch (std::exception &e)
+    {
+        fprintf(stderr, "ERROR: Cannot open file \"%s\".\n", filename);
+        std::exit(EXIT_FAILURE);
+    }
+    std::stringstream shader;
+    shader << file.rdbuf();
+    std::string str = shader.str();
+    const GLchar *shader_string = str.c_str();
+    const GLint length = static_cast<GLint>(str.length());
+    glShaderSource(shader_id, 1, &shader_string, &length);
+    glCompileShader(shader_id);
 }
 
-GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id) {
-    GLuint program_id = glCreateProgram(); glAttachShader(program_id, vertex_shader_id); glAttachShader(program_id, fragment_shader_id); glLinkProgram(program_id); return program_id;
+GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id)
+{
+    GLuint program_id = glCreateProgram();
+    glAttachShader(program_id, vertex_shader_id);
+    glAttachShader(program_id, fragment_shader_id);
+    glLinkProgram(program_id);
+    return program_id;
 }
 
-void TextRendering_ShowFramesPerSecond(GLFWwindow* window) {
-    if ( !g_ShowInfoText ) return;
-    static float old_seconds = (float)glfwGetTime(); static int ellapsed_frames = 0; static char buffer[20] = "?? fps";
-    ellapsed_frames += 1; float seconds = (float)glfwGetTime();
-    if ( seconds - old_seconds > 1.0f ) { snprintf(buffer, 20, "%.2f fps", ellapsed_frames / (seconds - old_seconds)); old_seconds = seconds; ellapsed_frames = 0; }
-    TextRendering_PrintString(window, buffer, 1.0f-(7 + 1)*TextRendering_CharWidth(window), 1.0f-TextRendering_LineHeight(window), 1.0f);
+void TextRendering_ShowFramesPerSecond(GLFWwindow *window)
+{
+    if (!g_ShowInfoText)
+        return;
+    static float old_seconds = (float)glfwGetTime();
+    static int ellapsed_frames = 0;
+    static char buffer[20] = "?? fps";
+    ellapsed_frames += 1;
+    float seconds = (float)glfwGetTime();
+    if (seconds - old_seconds > 1.0f)
+    {
+        snprintf(buffer, 20, "%.2f fps", ellapsed_frames / (seconds - old_seconds));
+        old_seconds = seconds;
+        ellapsed_frames = 0;
+    }
+    TextRendering_PrintString(window, buffer, 1.0f - (7 + 1) * TextRendering_CharWidth(window), 1.0f - TextRendering_LineHeight(window), 1.0f);
 }
 
 // ============================================================================
 // MAIN LOOP
 // ============================================================================
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     int success = glfwInit();
-    if (!success) { std::exit(EXIT_FAILURE); }
+    if (!success)
+    {
+        std::exit(EXIT_FAILURE);
+    }
 
     glfwSetErrorCallback(ErrorCallback);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(800, 600, "INF01047 - Quack", NULL, NULL);
-    if (!window) { glfwTerminate(); std::exit(EXIT_FAILURE); }
+    GLFWwindow *window = glfwCreateWindow(800, 600, "INF01047 - Quack", NULL, NULL);
+    if (!window)
+    {
+        glfwTerminate();
+        std::exit(EXIT_FAILURE);
+    }
 
     glfwSetKeyCallback(window, KeyCallback);
     glfwSetMouseButtonCallback(window, MouseButtonCallback);
     glfwSetCursorPosCallback(window, CursorPosCallback);
     glfwSetScrollCallback(window, ScrollCallback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); 
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwMakeContextCurrent(window);
-    gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
+    gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
-    FramebufferSizeCallback(window, 800, 600); 
+    FramebufferSizeCallback(window, 800, 600);
 
     LoadShadersFromFiles();
 
     g_DefaultTexture = LoadTextureImage("../../data/red_brick_diff_1k.jpg");
 
     ObjModel alienModel("../../assets/alien_obj/VG59BZPNHSI70DYK7XZUK7B4F.obj");
-    ComputeNormals(&alienModel); 
+    ComputeNormals(&alienModel);
     BuildTrianglesAndAddToVirtualScene(&alienModel, "../../assets/alien_obj/");
 
     ObjModel boxModel("../../assets/box_obj/0WITZ8WLUCO2UQ5HBO68QE9ZR.obj");
-    ComputeNormals(&boxModel); 
+    ComputeNormals(&boxModel);
     BuildTrianglesAndAddToVirtualScene(&boxModel, "../../assets/box_obj/");
 
     ObjModel gunModel("../../assets/gun_obj/4M495IHA13QVT7Z1F2JJ4T2OJ.obj");
-    ComputeNormals(&gunModel); 
+    ComputeNormals(&gunModel);
     BuildTrianglesAndAddToVirtualScene(&gunModel, "../../assets/gun_obj/");
-    
+
     ObjModel quakeMapModel("../../assets/quake-e1m1-the-slipgate-complex/source/e1m1/e1m1.obj");
-    ComputeNormals(&quakeMapModel); 
+    ComputeNormals(&quakeMapModel);
     BuildTrianglesAndAddToVirtualScene(&quakeMapModel, "../../assets/quake-e1m1-the-slipgate-complex/source/e1m1/");
 
     // PRÉ-COMPUTA A FÍSICA PARA 60FPS
@@ -743,10 +1095,10 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-    int activeGun = 0;             
-    float recoilTimer = 0.0f;      
-    float RECOIL_DURATION = 0.25f; 
-    float RECOIL_DISTANCE = 0.6f;  
+    int activeGun = 0;
+    float recoilTimer = 0.0f;
+    float RECOIL_DURATION = 0.25f;
+    float RECOIL_DISTANCE = 0.6f;
 
     // Con
     glm::vec2 playerVelocityXZ(0.0f, 0.0f); // NOVO: Vetor de Inércia Lateral
@@ -755,8 +1107,8 @@ int main(int argc, char* argv[])
     const float JUMP_FORCE = 6.0f;
     const float PLAYER_HEIGHT = 1.2f;
     const float PLAYER_RADIUS = 0.3f;
-    const float STEP_HEIGHT  = 0.55f; // Degraus/bumps menores que isso são auto-galgados
-    float cameraYSmooth = 0.0f;       // Offset visual decaindo para suavizar subidas
+    const float STEP_HEIGHT = 0.55f; // Degraus/bumps menores que isso são auto-galgados
+    float cameraYSmooth = 0.0f;      // Offset visual decaindo para suavizar subidas
 
     while (!glfwWindowShouldClose(window))
     {
@@ -771,42 +1123,50 @@ int main(int argc, char* argv[])
         lastTime = currentTime;
 
         // GAME OVER: HP zerado congela tudo (mantém renderização para mostrar tela)
-        if (g_PlayerHP <= 0) {
+        if (g_PlayerHP <= 0)
+        {
             deltaTime = 0.0f;
         }
 
-// ------------------------------------------------------------------------------------
+        // ------------------------------------------------------------------------------------
         // VETORES DA CÂMERA DO JOGADOR
         // ------------------------------------------------------------------------------------
         float y = sin(g_CameraPhi);
         float z = cos(g_CameraPhi) * cos(g_CameraTheta);
         float x = cos(g_CameraPhi) * sin(g_CameraTheta);
-        
-        glm::vec4 camera_view_vector = glm::vec4(x, y, z, 0.0f); 
-        glm::vec4 camera_up_vector   = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f); 
+
+        glm::vec4 camera_view_vector = glm::vec4(x, y, z, 0.0f);
+        glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
         glm::vec4 camera_right_vector = crossproduct(camera_view_vector, camera_up_vector);
-        camera_right_vector = camera_right_vector / norm(camera_right_vector); 
+        camera_right_vector = camera_right_vector / norm(camera_right_vector);
 
         glm::vec3 forward_walk(camera_view_vector.x, 0.0f, camera_view_vector.z);
-        if(glm::length(forward_walk) > 0.0f) forward_walk = glm::normalize(forward_walk);
+        if (glm::length(forward_walk) > 0.0f)
+            forward_walk = glm::normalize(forward_walk);
 
         glm::vec3 right_walk(camera_right_vector.x, 0.0f, camera_right_vector.z);
-        if(glm::length(right_walk) > 0.0f) right_walk = glm::normalize(right_walk);
+        if (glm::length(right_walk) > 0.0f)
+            right_walk = glm::normalize(right_walk);
 
         // ------------------------------------------------------------------------------------
         // FÍSICA OTIMIZADA DO JOGADOR (Mecânica de "Escorregar"/Friction do Quake)
         // ------------------------------------------------------------------------------------
         // Essa variável guarda o embalo do jogador. Como é "static", ela sobrevive a cada frame do "while".
         static glm::vec3 playerVelocityXZ(0.0f, 0.0f, 0.0f);
-        
+
         // 1. Pega a direção que o jogador está tentando ir com o teclado
         glm::vec3 inputDirection(0.0f, 0.0f, 0.0f);
-        if (g_WPressed) inputDirection += forward_walk;
-        if (g_SPressed) inputDirection -= forward_walk;
-        if (g_APressed) inputDirection -= right_walk;
-        if (g_DPressed) inputDirection += right_walk;
+        if (g_WPressed)
+            inputDirection += forward_walk;
+        if (g_SPressed)
+            inputDirection -= forward_walk;
+        if (g_APressed)
+            inputDirection -= right_walk;
+        if (g_DPressed)
+            inputDirection += right_walk;
 
-        if(glm::length(inputDirection) > 0.0f) {
+        if (glm::length(inputDirection) > 0.0f)
+        {
             inputDirection = glm::normalize(inputDirection); // Normaliza para não andar mais rápido na diagonal
         }
 
@@ -814,29 +1174,36 @@ int main(int argc, char* argv[])
         float ACCELERATION = 40.0f; // O quão rápido ele chega na velocidade máxima
         float FRICTION = 10.0f;     // O quanto o chão freia ele (menor = escorrega mais)
         float MAX_SPEED = 8.0f;     // Velocidade máxima permitida
-        
+
         // Se o jogador está no ar, ele tem menos atrito (Air Strafe leve)
-        if (playerVelocityY != 0.0f) {
-             FRICTION = 2.0f;
-             ACCELERATION = 15.0f;
+        if (playerVelocityY != 0.0f)
+        {
+            FRICTION = 2.0f;
+            ACCELERATION = 15.0f;
         }
 
         // 3. Aplica Aceleração ou Atrito na Velocidade Atual
-        if (glm::length(inputDirection) > 0.0f) {
+        if (glm::length(inputDirection) > 0.0f)
+        {
             // Acelera na direção das teclas
             playerVelocityXZ += inputDirection * ACCELERATION * deltaTime;
 
             // Limita para não passar do MAX_SPEED
-            if (glm::length(playerVelocityXZ) > MAX_SPEED) {
+            if (glm::length(playerVelocityXZ) > MAX_SPEED)
+            {
                 playerVelocityXZ = glm::normalize(playerVelocityXZ) * MAX_SPEED;
             }
-        } else {
+        }
+        else
+        {
             // Nenhuma tecla apertada: aplica o Atrito para escorregar até parar
             float currentSpeed = glm::length(playerVelocityXZ);
-            if (currentSpeed > 0.0f) {
+            if (currentSpeed > 0.0f)
+            {
                 float drop = currentSpeed * FRICTION * deltaTime; // Freia proporcional à velocidade
                 float newSpeed = currentSpeed - drop;
-                if (newSpeed < 0.0f) newSpeed = 0.0f;             // Se passar de zero, para totalmente
+                if (newSpeed < 0.0f)
+                    newSpeed = 0.0f; // Se passar de zero, para totalmente
                 playerVelocityXZ = (playerVelocityXZ / currentSpeed) * newSpeed;
             }
         }
@@ -855,56 +1222,68 @@ int main(int argc, char* argv[])
         // Anti-out-of-bounds: se estamos no chão, recusa qualquer XZ que não tenha
         // chão em lugar algum debaixo (ResolveFloorHeight devolve -9999 nesse caso).
         // No ar, deixa passar (queda livre legítima).
-        auto destHasFloor = [&](float x, float z) -> bool {
-            if (!wasGrounded) return true;
+        auto destHasFloor = [&](float x, float z) -> bool
+        {
+            if (!wasGrounded)
+                return true;
             float fy = ResolveFloorHeight(x, g_CameraPosition.y, z);
             return fy > -9000.0f;
         };
 
         if (destHasFloor(nextPosFlat.x, nextPosFlat.z) &&
             !CheckWallCollision(nextPosFlat.x, nextPosFlat.y - PLAYER_HEIGHT, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-            !CheckEntityCollision(nextPosFlat, PLAYER_RADIUS, PLAYER_HEIGHT)) {
+            !CheckEntityCollision(nextPosFlat, PLAYER_RADIUS, PLAYER_HEIGHT))
+        {
             g_CameraPosition.x = nextPosFlat.x;
             g_CameraPosition.z = nextPosFlat.z;
             moved = true;
-        } else {
+        }
+        else
+        {
             // Tenta mover APENAS no eixo X (Deslizar)
             if (destHasFloor(nextPosFlat.x, g_CameraPosition.z) &&
                 !CheckWallCollision(nextPosFlat.x, nextPosFlat.y - PLAYER_HEIGHT, g_CameraPosition.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-                !CheckEntityCollision(glm::vec3(nextPosFlat.x, nextPosFlat.y, g_CameraPosition.z), PLAYER_RADIUS, PLAYER_HEIGHT)) {
+                !CheckEntityCollision(glm::vec3(nextPosFlat.x, nextPosFlat.y, g_CameraPosition.z), PLAYER_RADIUS, PLAYER_HEIGHT))
+            {
                 g_CameraPosition.x = nextPosFlat.x;
                 playerVelocityXZ.z = 0.0f; // Perde o embalo no eixo que bateu
                 moved = true;
-            } 
+            }
             // Tenta mover APENAS no eixo Z (Deslizar)
             else if (destHasFloor(g_CameraPosition.x, nextPosFlat.z) &&
                      !CheckWallCollision(g_CameraPosition.x, nextPosFlat.y - PLAYER_HEIGHT, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-                     !CheckEntityCollision(glm::vec3(g_CameraPosition.x, nextPosFlat.y, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT)) {
+                     !CheckEntityCollision(glm::vec3(g_CameraPosition.x, nextPosFlat.y, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT))
+            {
                 g_CameraPosition.z = nextPosFlat.z;
                 playerVelocityXZ.x = 0.0f; // Perde o embalo no eixo que bateu
                 moved = true;
-            } else {
+            }
+            else
+            {
                 // Se bateu reto num "L", zera a velocidade pros dois lados
                 playerVelocityXZ = glm::vec3(0.0f);
             }
         }
 
         // Tenta fazer o step-up só se a lógica de cima falhou em mover
-        if (!moved && playerVelocityY <= 0.01f) {
+        if (!moved && playerVelocityY <= 0.01f)
+        {
             float raisedFootY = (g_CameraPosition.y - PLAYER_HEIGHT) + STEP_HEIGHT;
             if (destHasFloor(nextPosFlat.x, nextPosFlat.z) &&
                 !CheckWallCollision(nextPosFlat.x, raisedFootY, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT) &&
-                !CheckEntityCollision(glm::vec3(nextPosFlat.x, g_CameraPosition.y + STEP_HEIGHT, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT)) {
-                
+                !CheckEntityCollision(glm::vec3(nextPosFlat.x, g_CameraPosition.y + STEP_HEIGHT, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT))
+            {
+
                 float candidateFloor = ResolveFloorHeight(nextPosFlat.x, raisedFootY, nextPosFlat.z);
                 float currentFoot = g_CameraPosition.y - PLAYER_HEIGHT;
                 float climb = candidateFloor - currentFoot;
 
                 g_CameraPosition.x = nextPosFlat.x;
                 g_CameraPosition.z = nextPosFlat.z;
-                if (climb > 0.0f && climb <= STEP_HEIGHT + 0.01f) {
-                    g_CameraPosition.y += climb;     
-                    cameraYSmooth -= climb;          
+                if (climb > 0.0f && climb <= STEP_HEIGHT + 0.01f)
+                {
+                    g_CameraPosition.y += climb;
+                    cameraYSmooth -= climb;
                     playerVelocityY = 0.0f;
                 }
                 moved = true;
@@ -919,36 +1298,47 @@ int main(int argc, char* argv[])
         // gruda no novo chão em vez de virar pulo. Só vale para descidas pequenas.
         float footNow = g_CameraPosition.y - PLAYER_HEIGHT;
         float dropToFloor = footNow - floorY;
-        if (wasGrounded && !g_SpacePressed && dropToFloor > 0.02f && dropToFloor <= STEP_HEIGHT + 0.05f) {
-            cameraYSmooth += dropToFloor;        // Câmera fica "alta" e desce suave
+        if (wasGrounded && !g_SpacePressed && dropToFloor > 0.02f && dropToFloor <= STEP_HEIGHT + 0.05f)
+        {
+            cameraYSmooth += dropToFloor; // Câmera fica "alta" e desce suave
             g_CameraPosition.y = floorY + PLAYER_HEIGHT;
             playerVelocityY = 0.0f;
-            if (g_SpacePressed) playerVelocityY = JUMP_FORCE;
-        } else {
+            if (g_SpacePressed)
+                playerVelocityY = JUMP_FORCE;
+        }
+        else
+        {
             playerVelocityY += GRAVITY * deltaTime;
             float nextFootY = (g_CameraPosition.y + playerVelocityY * deltaTime) - PLAYER_HEIGHT;
 
-            if (nextFootY <= floorY) {
+            if (nextFootY <= floorY)
+            {
                 float prevFoot = g_CameraPosition.y - PLAYER_HEIGHT;
                 float snap = floorY - prevFoot;
                 // Se o chão subiu (rampa/degrau pequeno), suaviza visualmente
-                if (snap > 0.02f && snap <= STEP_HEIGHT + 0.05f) {
+                if (snap > 0.02f && snap <= STEP_HEIGHT + 0.05f)
+                {
                     cameraYSmooth -= snap;
                 }
                 g_CameraPosition.y = floorY + PLAYER_HEIGHT;
                 playerVelocityY = 0.0f;
-                if (g_SpacePressed) playerVelocityY = JUMP_FORCE;
-            } else {
+                if (g_SpacePressed)
+                    playerVelocityY = JUMP_FORCE;
+            }
+            else
+            {
                 g_CameraPosition.y += playerVelocityY * deltaTime;
             }
         }
 
         // Decai o offset suave da câmera (em ~0.15s chega perto de zero)
-        if (cameraYSmooth != 0.0f) {
+        if (cameraYSmooth != 0.0f)
+        {
             float decayPerSec = 8.0f; // maior = mais rápido
             float factor = expf(-decayPerSec * deltaTime);
             cameraYSmooth *= factor;
-            if (fabsf(cameraYSmooth) < 0.001f) cameraYSmooth = 0.0f;
+            if (fabsf(cameraYSmooth) < 0.001f)
+                cameraYSmooth = 0.0f;
         }
 
         glm::vec4 cameraEye = g_CameraPosition;
@@ -964,23 +1354,33 @@ int main(int argc, char* argv[])
 
         model = Matrix_Translate(0.0f, 0.0f, 0.0f) * Matrix_Scale(g_MapScale, g_MapScale, g_MapScale);
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, WALL); 
+        glUniform1i(g_object_id_uniform, WALL);
         DrawModel(&quakeMapModel);
 
         // --- SEPARAÇÃO ALIEN x ALIEN (anti-overlap) ---
         // Empurra pares de aliens que estão muito próximos. Roda antes da IA.
         const float ALIEN_RADIUS = 0.45f;
         const float MIN_ALIEN_DIST = 2.0f * ALIEN_RADIUS;
-        for (size_t i = 0; i < mapEntities.size(); ++i) {
-            if (mapEntities[i].type != ALIEN) continue;
-            for (size_t j = i + 1; j < mapEntities.size(); ++j) {
-                if (mapEntities[j].type != ALIEN) continue;
+        for (size_t i = 0; i < mapEntities.size(); ++i)
+        {
+            if (mapEntities[i].type != ALIEN)
+                continue;
+            for (size_t j = i + 1; j < mapEntities.size(); ++j)
+            {
+                if (mapEntities[j].type != ALIEN)
+                    continue;
                 float dx = mapEntities[j].x - mapEntities[i].x;
                 float dz = mapEntities[j].z - mapEntities[i].z;
-                float d2 = dx*dx + dz*dz;
-                if (d2 >= MIN_ALIEN_DIST * MIN_ALIEN_DIST) continue;
+                float d2 = dx * dx + dz * dz;
+                if (d2 >= MIN_ALIEN_DIST * MIN_ALIEN_DIST)
+                    continue;
                 float d = sqrtf(d2);
-                if (d < 0.0001f) { dx = 1.0f; dz = 0.0f; d = 1.0f; }
+                if (d < 0.0001f)
+                {
+                    dx = 1.0f;
+                    dz = 0.0f;
+                    d = 1.0f;
+                }
                 float overlap = MIN_ALIEN_DIST - d;
                 float nx = dx / d, nz = dz / d;
                 float push = overlap * 0.5f;
@@ -989,31 +1389,44 @@ int main(int argc, char* argv[])
                 float aZ = mapEntities[i].z - nz * push;
                 float bX = mapEntities[j].x + nx * push;
                 float bZ = mapEntities[j].z + nz * push;
-                if (!CheckWallCollision(aX, mapEntities[i].y, aZ, 0.3f, 1.0f)) {
-                    mapEntities[i].x = aX; mapEntities[i].z = aZ;
+                if (!CheckWallCollision(aX, mapEntities[i].y, aZ, 0.3f, 1.0f))
+                {
+                    mapEntities[i].x = aX;
+                    mapEntities[i].z = aZ;
                 }
-                if (!CheckWallCollision(bX, mapEntities[j].y, bZ, 0.3f, 1.0f)) {
-                    mapEntities[j].x = bX; mapEntities[j].z = bZ;
+                if (!CheckWallCollision(bX, mapEntities[j].y, bZ, 0.3f, 1.0f))
+                {
+                    mapEntities[j].x = bX;
+                    mapEntities[j].z = bZ;
                 }
             }
         }
 
         // --- ATUALIZANDO INIMIGOS ---
-        for (auto& ent : mapEntities) {
-            if (ent.type == 0) continue; 
+        for (auto &ent : mapEntities)
+        {
+            if (ent.type == 0)
+                continue;
 
-            // FÍSICA DOS ALIENS 
-            if (ent.type == ALIEN) {
+            // FÍSICA DOS ALIENS
+            if (ent.type == ALIEN)
+            {
                 float alienFloorY = ResolveFloorHeight(ent.x, ent.y, ent.z);
-                
+
                 // NOVIDADE: Cuspida Anti-Clipping (Se o alien entrou na malha por acidente)
-                if (ent.y < alienFloorY - 0.1f) {
-                    ent.y = alienFloorY + 0.5f; 
-                } else if (ent.y > alienFloorY) {
-                    ent.y += GRAVITY * deltaTime; 
-                    if (ent.y < alienFloorY) ent.y = alienFloorY;
-                } else {
-                    ent.y = alienFloorY; 
+                if (ent.y < alienFloorY - 0.1f)
+                {
+                    ent.y = alienFloorY + 0.5f;
+                }
+                else if (ent.y > alienFloorY)
+                {
+                    ent.y += GRAVITY * deltaTime;
+                    if (ent.y < alienFloorY)
+                        ent.y = alienFloorY;
+                }
+                else
+                {
+                    ent.y = alienFloorY;
                 }
 
                 // IA de Perseguição
@@ -1023,33 +1436,39 @@ int main(int argc, char* argv[])
 
                 float AGGRO_DISTANCE = 50.0f;
                 float ENEMY_SPEED = 3.0f;
-                float MELEE_RANGE = 1.0f;     // Distância para bater no jogador
-                float BOUNCE_DIST = 1.5f;     // Quão longe o alien é empurrado
-                float PLAYER_KNOCKBACK = 0.8f;// Quão longe o jogador é empurrado
-                int   ALIEN_DAMAGE = 10;      // Dano por colisão
-                float HIT_COOLDOWN = 1.0f;    // Segundos entre golpes do mesmo alien
+                float MELEE_RANGE = 1.0f;      // Distância para bater no jogador
+                float BOUNCE_DIST = 1.5f;      // Quão longe o alien é empurrado
+                float PLAYER_KNOCKBACK = 0.8f; // Quão longe o jogador é empurrado
+                int ALIEN_DAMAGE = 10;         // Dano por colisão
+                float HIT_COOLDOWN = 1.0f;     // Segundos entre golpes do mesmo alien
                 float alienBobbingY = 0.0f;
                 float alienWobbleZ = 0.0f;
 
-                if (ent.hitCooldown > 0.0f) {
+                if (ent.hitCooldown > 0.0f)
+                {
                     ent.hitCooldown -= deltaTime;
-                    if (ent.hitCooldown < 0.0f) ent.hitCooldown = 0.0f;
+                    if (ent.hitCooldown < 0.0f)
+                        ent.hitCooldown = 0.0f;
                 }
 
-                if (dist < AGGRO_DISTANCE && dist > 0.0001f) {
+                if (dist < AGGRO_DISTANCE && dist > 0.0001f)
+                {
                     float ndirX = dirX / dist;
                     float ndirZ = dirZ / dist;
 
-                    if (ent.behavior == ALIEN_CHASER) {
+                    if (ent.behavior == ALIEN_CHASER)
+                    {
                         // Só avança se ainda não está no alcance corpo a corpo
-                        if (dist > MELEE_RANGE) {
+                        if (dist > MELEE_RANGE)
+                        {
                             float stepLen = ENEMY_SPEED * deltaTime;
 
                             // Helper: testa se há um chão razoável em (x,z) e se não bate
                             // em parede. Permite descer pequenos degraus (ALIEN_STEP_DOWN)
                             // mas recusa o vazio (sem chão de jeito nenhum).
                             const float ALIEN_STEP_DOWN = 1.5f; // queda máxima por passo
-                            auto tryStep = [&](float angleOffset, float& outX, float& outZ, float& outY) -> bool {
+                            auto tryStep = [&](float angleOffset, float &outX, float &outZ, float &outY) -> bool
+                            {
                                 float ca = cosf(angleOffset);
                                 float sa = sinf(angleOffset);
                                 float dX = ndirX * ca - ndirZ * sa;
@@ -1060,11 +1479,15 @@ int main(int argc, char* argv[])
                                 // Procura chão na nova posição (a partir de bem alto)
                                 float searchFromY = ent.y + 1.0f;
                                 float fY = ResolveFloorHeight(nX, searchFromY, nZ);
-                                if (fY < -9000.0f) return false;             // Vazio: recusa
-                                if (fY > ent.y + STEP_HEIGHT + 0.05f) return false; // Subida grande demais
-                                if (ent.y - fY > ALIEN_STEP_DOWN) return false;     // Despenhadeiro
+                                if (fY < -9000.0f)
+                                    return false; // Vazio: recusa
+                                if (fY > ent.y + STEP_HEIGHT + 0.05f)
+                                    return false; // Subida grande demais
+                                if (ent.y - fY > ALIEN_STEP_DOWN)
+                                    return false; // Despenhadeiro
 
-                                if (CheckWallCollision(nX, fY, nZ, 0.3f, 1.0f)) return false;
+                                if (CheckWallCollision(nX, fY, nZ, 0.3f, 1.0f))
+                                    return false;
 
                                 outX = nX;
                                 outZ = nZ;
@@ -1076,14 +1499,16 @@ int main(int argc, char* argv[])
                             // dois lados pra contornar obstáculos.
                             const float angles[] = {
                                 0.0f,
-                                 0.5236f, -0.5236f,   // ±30°
-                                 1.0472f, -1.0472f,   // ±60°
-                                 1.5708f, -1.5708f    // ±90°
+                                0.5236f, -0.5236f, // ±30°
+                                1.0472f, -1.0472f, // ±60°
+                                1.5708f, -1.5708f  // ±90°
                             };
 
                             float nX, nZ, nY;
-                            for (float a : angles) {
-                                if (tryStep(a, nX, nZ, nY)) {
+                            for (float a : angles)
+                            {
+                                if (tryStep(a, nX, nZ, nY))
+                                {
                                     ent.x = nX;
                                     ent.z = nZ;
                                     ent.y = nY;
@@ -1093,17 +1518,21 @@ int main(int argc, char* argv[])
                         }
 
                         // BATIDA: aplica knockback nos dois e dano no jogador
-                        if (dist <= MELEE_RANGE && ent.hitCooldown == 0.0f) {
-                            if (g_PlayerHP > 0) {
+                        if (dist <= MELEE_RANGE && ent.hitCooldown == 0.0f)
+                        {
+                            if (g_PlayerHP > 0)
+                            {
                                 g_PlayerHP -= ALIEN_DAMAGE;
-                                if (g_PlayerHP < 0) g_PlayerHP = 0;
+                                if (g_PlayerHP < 0)
+                                    g_PlayerHP = 0;
                             }
                             ent.hitCooldown = HIT_COOLDOWN;
 
                             // Empurra alien para trás (sentido oposto ao jogador)
                             float bX = ent.x - ndirX * BOUNCE_DIST;
                             float bZ = ent.z - ndirZ * BOUNCE_DIST;
-                            if (!CheckWallCollision(bX, ent.y, bZ, 0.3f, 1.0f)) {
+                            if (!CheckWallCollision(bX, ent.y, bZ, 0.3f, 1.0f))
+                            {
                                 ent.x = bX;
                                 ent.z = bZ;
                             }
@@ -1112,10 +1541,10 @@ int main(int argc, char* argv[])
                             glm::vec3 pushPos = glm::vec3(
                                 g_CameraPosition.x + ndirX * PLAYER_KNOCKBACK,
                                 g_CameraPosition.y,
-                                g_CameraPosition.z + ndirZ * PLAYER_KNOCKBACK
-                            );
+                                g_CameraPosition.z + ndirZ * PLAYER_KNOCKBACK);
                             if (!CheckWallCollision(pushPos.x, pushPos.y - PLAYER_HEIGHT, pushPos.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-                                !CheckEntityCollision(pushPos, PLAYER_RADIUS, PLAYER_HEIGHT)) {
+                                !CheckEntityCollision(pushPos, PLAYER_RADIUS, PLAYER_HEIGHT))
+                            {
                                 g_CameraPosition.x = pushPos.x;
                                 g_CameraPosition.z = pushPos.z;
                             }
@@ -1125,21 +1554,24 @@ int main(int argc, char* argv[])
                         alienBobbingY = abs(sin(currentTime * runAnimSpeed)) * 0.15f;
                         alienWobbleZ = cos(currentTime * runAnimSpeed * 0.5f) * 0.15f;
                     }
-                    else if (ent.behavior == ALIEN_SHOOTER) {
+                    else if (ent.behavior == ALIEN_SHOOTER)
+                    {
                         // Atirador: parado, dispara projeteis lentos quando o cooldown zera
                         ent.shootCooldown -= deltaTime;
                         const float SHOOT_INTERVAL = 2.2f;
                         const float PROJECTILE_SPEED = 6.0f;
                         const float PROJECTILE_LIFE = 4.0f;
-                        if (ent.shootCooldown <= 0.0f) {
+                        if (ent.shootCooldown <= 0.0f)
+                        {
                             ent.shootCooldown = SHOOT_INTERVAL;
 
                             // Origem na altura do peito do alien
                             glm::vec3 origin(ent.x, ent.y + 0.9f, ent.z);
                             glm::vec3 target(g_CameraPosition.x, g_CameraPosition.y - 0.3f, g_CameraPosition.z);
                             glm::vec3 dir = target - origin;
-                            float dlen = sqrtf(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z);
-                            if (dlen > 0.0001f) dir /= dlen;
+                            float dlen = sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+                            if (dlen > 0.0001f)
+                                dir /= dlen;
 
                             EnemyProjectile ep;
                             ep.active = true;
@@ -1152,21 +1584,21 @@ int main(int argc, char* argv[])
                         alienBobbingY = sinf(currentTime * 2.0f) * 0.05f;
                     }
                 }
-                
+
                 float angle = atan2(dirX, dirZ);
                 // OFFSET DE 0.65f ADICIONADO PARA NÃO FICAR ENTERRADO
-                model = Matrix_Translate(ent.x, ent.y + alienBobbingY + 0.65f, ent.z)
-                      * Matrix_Rotate_Y(angle + 1.5708f)
-                      * Matrix_Rotate_Z(alienWobbleZ)
-                      * Matrix_Scale(ent.scale, ent.scale, ent.scale);
+                model = Matrix_Translate(ent.x, ent.y + alienBobbingY + 0.65f, ent.z) * Matrix_Rotate_Y(angle + 1.5708f) * Matrix_Rotate_Z(alienWobbleZ) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
 
                 // Pisca-pisca ao ser baleado: decai e alterna intensidade
-                if (ent.hitFlash > 0.0f) {
+                if (ent.hitFlash > 0.0f)
+                {
                     ent.hitFlash -= deltaTime;
-                    if (ent.hitFlash < 0.0f) ent.hitFlash = 0.0f;
+                    if (ent.hitFlash < 0.0f)
+                        ent.hitFlash = 0.0f;
                 }
                 float flashIntensity = 0.0f;
-                if (ent.hitFlash > 0.0f) {
+                if (ent.hitFlash > 0.0f)
+                {
                     // Pisca 3x na duração do flash (~12 Hz)
                     float strobe = 0.5f + 0.5f * sinf(ent.hitFlash * 75.0f);
                     flashIntensity = strobe * 0.85f;
@@ -1178,91 +1610,150 @@ int main(int argc, char* argv[])
                 DrawModel(&alienModel);
                 glUniform1f(g_hit_flash_uniform, 0.0f); // restaura para próximos draws
             }
-            else if (ent.type == BOX) {
+            else if (ent.type == BOX)
+            {
                 float boxFloorY = ResolveFloorHeight(ent.x, ent.y, ent.z);
-                if (ent.y > boxFloorY) { ent.y += GRAVITY * deltaTime; if (ent.y < boxFloorY) ent.y = boxFloorY; }
-                
+                if (ent.y > boxFloorY)
+                {
+                    ent.y += GRAVITY * deltaTime;
+                    if (ent.y < boxFloorY)
+                        ent.y = boxFloorY;
+                }
+
                 model = Matrix_Translate(ent.x, ent.y + 0.25f, ent.z) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                 glUniform1i(g_object_id_uniform, BOX);
                 DrawModel(&boxModel);
             }
-            else if (ent.type == PORTAL) {
+            else if (ent.type == PORTAL)
+            {
                 model = Matrix_Translate(ent.x, ent.y + 1.0f, ent.z) * Matrix_Scale(1.0f, 2.0f, 0.1f);
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                 glUniform1i(g_object_id_uniform, PORTAL);
                 DrawModel(&boxModel);
             }
+            else if (ent.type == AMMO_BOX || ent.type == HEALTH_BOX)
+            {
+                // Rotaciona a caixa lentamente (para destacar como item coletável)
+                model = Matrix_Translate(ent.x, ent.y + 0.15f, ent.z) * Matrix_Rotate_Y(currentTime * 2.0f) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, ent.type); // Envia o ID para o shader pintar diferente
+                DrawModel(&boxModel);
+            }
         }
-        
-        float recoilOffsetL = 0.0f; float recoilOffsetR = 0.0f;
-        if (recoilTimer > 0.0f) { recoilTimer += deltaTime; if (recoilTimer >= RECOIL_DURATION) { recoilTimer = 0.0f; activeGun = 1 - activeGun; } }
 
-        if (g_LeftMouseButtonPressed && recoilTimer == 0.0f && g_PlayerHP > 0) {
-            recoilTimer += deltaTime; 
-            Projectile proj; proj.active = true; proj.t = 0.0f;
+        float recoilOffsetL = 0.0f;
+        float recoilOffsetR = 0.0f;
+        if (recoilTimer > 0.0f)
+        {
+            recoilTimer += deltaTime;
+            if (recoilTimer >= RECOIL_DURATION)
+            {
+                recoilTimer = 0.0f;
+                activeGun = 1 - activeGun;
+            }
+        }
+
+        if (g_LeftMouseButtonPressed && recoilTimer == 0.0f && g_PlayerHP > 0 && g_PlayerAmmo > 0)
+        {
+            recoilTimer += deltaTime;
+            g_PlayerAmmo--; // Consome 1 bala
+
+            Projectile proj;
+            proj.active = true;
+            proj.t = 0.0f;
             float sideOffset = (activeGun == 0) ? -0.15f : 0.15f;
-            proj.p0 = g_CameraPosition + (camera_right_vector * sideOffset) + (camera_up_vector * -0.5f) + (camera_view_vector * 1.5f); 
+            proj.p0 = g_CameraPosition + (camera_right_vector * sideOffset) + (camera_up_vector * -0.5f) + (camera_view_vector * 1.5f);
             proj.p3 = g_CameraPosition + (camera_view_vector * 30.0f);
             proj.p1 = proj.p0 + (camera_view_vector * 5.0f) + (camera_up_vector * 1.0f);
             proj.p2 = proj.p3 - (camera_view_vector * 10.0f) + (camera_up_vector * 1.0f);
             g_Projectiles.push_back(proj);
         }
 
-        for (auto& p : g_Projectiles) {
-            if (!p.active) continue;
-            p.t += deltaTime * 2.5f; 
-            if (p.t >= 1.0f) { p.active = false; continue; }
-            
-            float u = 1.0f - p.t, tt = p.t * p.t, uu = u * u, uuu = uu * u, ttt = tt * p.t;
-            glm::vec4 pos = (uuu * p.p0) + (3.0f * uu * p.t * p.p1) + (3.0f * u * tt * p.p2) + (ttt * p.p3);
-            
-            if (CheckWallCollision(pos.x, pos.y, pos.z, 0.1f, 0.1f)) {
+        for (auto &p : g_Projectiles)
+        {
+            if (!p.active)
+                continue;
+            p.t += deltaTime * 2.5f;
+            if (p.t >= 1.0f)
+            {
                 p.active = false;
                 continue;
             }
 
-            glm::vec3 bulletSize(0.2f, 0.2f, 0.2f); glm::vec3 alienSize(0.5f, 1.0f, 0.5f);
-            for (auto& ent : mapEntities) {
-                if (ent.type == ALIEN) {
-                    if (CheckAABB(glm::vec3(pos.x, pos.y, pos.z), bulletSize, glm::vec3(ent.x, ent.y, ent.z), alienSize)) {
+            float u = 1.0f - p.t, tt = p.t * p.t, uu = u * u, uuu = uu * u, ttt = tt * p.t;
+            glm::vec4 pos = (uuu * p.p0) + (3.0f * uu * p.t * p.p1) + (3.0f * u * tt * p.p2) + (ttt * p.p3);
+
+            if (CheckWallCollision(pos.x, pos.y, pos.z, 0.1f, 0.1f))
+            {
+                p.active = false;
+                continue;
+            }
+
+            glm::vec3 bulletSize(0.2f, 0.2f, 0.2f);
+            glm::vec3 alienSize(0.5f, 1.0f, 0.5f);
+            for (auto &ent : mapEntities)
+            {
+                if (ent.type == ALIEN)
+                {
+                    if (CheckAABB(glm::vec3(pos.x, pos.y, pos.z), bulletSize, glm::vec3(ent.x, ent.y, ent.z), alienSize))
+                    {
                         p.active = false;
                         ent.hp -= 1;
                         ent.hitFlash = 0.25f; // segundos de pisca-pisca
-                        if (ent.hp <= 0) {
+                        if (ent.hp <= 0)
+                        {
                             ent.type = 0; // morre
                         }
                         break;
                     }
                 }
             }
-            if (!p.active) continue;
+            if (!p.active)
+                continue;
 
             glm::vec4 tangent = (3.0f * uu * (p.p1 - p.p0)) + (6.0f * u * p.t * (p.p2 - p.p1)) + (3.0f * tt * (p.p3 - p.p2));
-            tangent.w = 0.0f; float mag = sqrt(tangent.x*tangent.x + tangent.y*tangent.y + tangent.z*tangent.z);
+            tangent.w = 0.0f;
+            float mag = sqrt(tangent.x * tangent.x + tangent.y * tangent.y + tangent.z * tangent.z);
             float yaw = 0.0f, pitch = 0.0f;
-            if (mag > 0.0001f) { glm::vec4 dir = tangent / mag; yaw = atan2(dir.x, dir.z); pitch = asin(-dir.y); }
-            
-            model = Matrix_Translate(pos.x, pos.y, pos.z) * Matrix_Rotate_Y(yaw) * Matrix_Rotate_X(pitch) * Matrix_Scale(0.02f, 0.02f, 0.6f); 
-            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model)); glUniform1i(g_object_id_uniform, BULLET); 
+            if (mag > 0.0001f)
+            {
+                glm::vec4 dir = tangent / mag;
+                yaw = atan2(dir.x, dir.z);
+                pitch = asin(-dir.y);
+            }
+
+            model = Matrix_Translate(pos.x, pos.y, pos.z) * Matrix_Rotate_Y(yaw) * Matrix_Rotate_X(pitch) * Matrix_Scale(0.02f, 0.02f, 0.6f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, BULLET);
             DrawVirtualObject("laser_cylinder");
         }
-        g_Projectiles.erase(std::remove_if(g_Projectiles.begin(), g_Projectiles.end(), [](const Projectile& p) { return !p.active; }), g_Projectiles.end());
+        g_Projectiles.erase(std::remove_if(g_Projectiles.begin(), g_Projectiles.end(), [](const Projectile &p)
+                                           { return !p.active; }),
+                            g_Projectiles.end());
 
         // --- ATUALIZAÇÃO DOS PROJETEIS DOS INIMIGOS ---
         {
             const float ENEMY_PROJECTILE_RADIUS = 0.18f;
-            const int   ENEMY_PROJECTILE_DAMAGE = 8;
+            const int ENEMY_PROJECTILE_DAMAGE = 8;
             glm::vec3 playerCenter(g_CameraPosition.x, g_CameraPosition.y - PLAYER_HEIGHT * 0.5f, g_CameraPosition.z);
 
-            for (auto& ep : g_EnemyProjectiles) {
-                if (!ep.active) continue;
+            for (auto &ep : g_EnemyProjectiles)
+            {
+                if (!ep.active)
+                    continue;
                 ep.pos += ep.vel * deltaTime;
                 ep.life -= deltaTime;
-                if (ep.life <= 0.0f) { ep.active = false; continue; }
+                if (ep.life <= 0.0f)
+                {
+                    ep.active = false;
+                    continue;
+                }
 
-                if (CheckWallCollision(ep.pos.x, ep.pos.y, ep.pos.z, 0.1f, 0.1f)) {
-                    ep.active = false; continue;
+                if (CheckWallCollision(ep.pos.x, ep.pos.y, ep.pos.z, 0.1f, 0.1f))
+                {
+                    ep.active = false;
+                    continue;
                 }
 
                 // Colisão com o jogador (cápsula simplificada)
@@ -1270,42 +1761,50 @@ int main(int argc, char* argv[])
                 float pdz = ep.pos.z - playerCenter.z;
                 float pdy = ep.pos.y - playerCenter.y;
                 float r = ENEMY_PROJECTILE_RADIUS + PLAYER_RADIUS;
-                if (pdx*pdx + pdz*pdz <= r*r && fabsf(pdy) <= PLAYER_HEIGHT * 0.6f) {
-                    if (g_PlayerHP > 0) {
+                if (pdx * pdx + pdz * pdz <= r * r && fabsf(pdy) <= PLAYER_HEIGHT * 0.6f)
+                {
+                    if (g_PlayerHP > 0)
+                    {
                         g_PlayerHP -= ENEMY_PROJECTILE_DAMAGE;
-                        if (g_PlayerHP < 0) g_PlayerHP = 0;
+                        if (g_PlayerHP < 0)
+                            g_PlayerHP = 0;
                     }
-                    ep.active = false; continue;
+                    ep.active = false;
+                    continue;
                 }
 
                 // Render: bolinha alongada na direção do movimento
-                float vmag = sqrtf(ep.vel.x*ep.vel.x + ep.vel.y*ep.vel.y + ep.vel.z*ep.vel.z);
+                float vmag = sqrtf(ep.vel.x * ep.vel.x + ep.vel.y * ep.vel.y + ep.vel.z * ep.vel.z);
                 float yaw = 0.0f, pitch = 0.0f;
-                if (vmag > 0.0001f) {
+                if (vmag > 0.0001f)
+                {
                     glm::vec3 vd = ep.vel / vmag;
                     yaw = atan2f(vd.x, vd.z);
                     pitch = asinf(-vd.y);
                 }
-                model = Matrix_Translate(ep.pos.x, ep.pos.y, ep.pos.z)
-                      * Matrix_Rotate_Y(yaw) * Matrix_Rotate_X(pitch)
-                      * Matrix_Scale(0.06f, 0.06f, 0.4f);
+                model = Matrix_Translate(ep.pos.x, ep.pos.y, ep.pos.z) * Matrix_Rotate_Y(yaw) * Matrix_Rotate_X(pitch) * Matrix_Scale(0.06f, 0.06f, 0.4f);
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                 glUniform1i(g_object_id_uniform, BULLET);
                 DrawVirtualObject("laser_cylinder");
             }
             g_EnemyProjectiles.erase(
                 std::remove_if(g_EnemyProjectiles.begin(), g_EnemyProjectiles.end(),
-                    [](const EnemyProjectile& e) { return !e.active; }),
+                               [](const EnemyProjectile &e)
+                               { return !e.active; }),
                 g_EnemyProjectiles.end());
         }
 
         // ====================================================================
         // ANIMAÇÃO PROCEDURAL DA ARMA (SWAY / BOBBING / RECOIL)
         // ====================================================================
-        if (recoilTimer > 0.0f) {
-            float t = recoilTimer / RECOIL_DURATION; 
+        if (recoilTimer > 0.0f)
+        {
+            float t = recoilTimer / RECOIL_DURATION;
             float currentRecoil = (t < 0.2f) ? (t / 0.2f) * RECOIL_DISTANCE : ((1.0f - t) / 0.8f) * RECOIL_DISTANCE;
-            if (activeGun == 0) recoilOffsetL = currentRecoil; else recoilOffsetR = currentRecoil;
+            if (activeGun == 0)
+                recoilOffsetL = currentRecoil;
+            else
+                recoilOffsetR = currentRecoil;
         }
 
         // 1. Calcula a intensidade do movimento do jogador (0.0 a 1.0)
@@ -1313,17 +1812,17 @@ int main(int argc, char* argv[])
         float speedNormalized = std::min(1.0f, currentSpeed / 8.0f); // 8.0f é o MAX_SPEED
 
         // 2. Animação de respiração (Sway) - Suave, ocorre mesmo parado
-        float swayTimer = currentTime * 1.5f; 
+        float swayTimer = currentTime * 1.5f;
         float swayX = cos(swayTimer) * 0.02f;
         float swayY = sin(swayTimer * 2.0f) * 0.02f;
 
         // 3. Animação de Passos (Bobbing) - Rápida e ampla, ocorre ao andar
-        float bobTimer = currentTime * 12.0f; // Frequência da passada
+        float bobTimer = currentTime * 12.0f;      // Frequência da passada
         float bobAmount = 0.15f * speedNormalized; // Multiplicador de intensidade
-        
+
         // Faz um "oito" perfeito
-        float bobX = cos(bobTimer * 0.5f) * bobAmount; 
-        float bobY = abs(sin(bobTimer)) * bobAmount * 0.5f; 
+        float bobX = cos(bobTimer * 0.5f) * bobAmount;
+        float bobY = abs(sin(bobTimer)) * bobAmount * 0.5f;
 
         // 4. Junta tudo no Offset final da arma
         float gunOffsetX = swayX + bobX;
@@ -1333,21 +1832,15 @@ int main(int argc, char* argv[])
         glDisable(GL_DEPTH_TEST);
 
         // Aplica o Offset calculado (gunOffsetX, gunOffsetY) à translação base da arma esquerda
-        model = Matrix_Translate(-0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetL) 
-              * Matrix_Rotate_Y(3.141592f + 0.01f) 
-              * Matrix_Rotate_X(0.20f) 
-              * Matrix_Scale(2.2f, 2.2f, 2.2f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model)); 
-        glUniform1i(g_object_id_uniform, GUN); 
+        model = Matrix_Translate(-0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetL) * Matrix_Rotate_Y(3.141592f + 0.01f) * Matrix_Rotate_X(0.20f) * Matrix_Scale(2.2f, 2.2f, 2.2f);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, GUN);
         DrawModel(&gunModel);
 
         // Aplica o Offset calculado (gunOffsetX, gunOffsetY) à translação base da arma direita
-        model = Matrix_Translate(0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetR) 
-              * Matrix_Rotate_Y(3.141592f - 0.01f) 
-              * Matrix_Rotate_X(0.20f) 
-              * Matrix_Scale(2.2f, 2.2f, 2.2f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model)); 
-        glUniform1i(g_object_id_uniform, GUN); 
+        model = Matrix_Translate(0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetR) * Matrix_Rotate_Y(3.141592f - 0.01f) * Matrix_Rotate_X(0.20f) * Matrix_Scale(2.2f, 2.2f, 2.2f);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, GUN);
         DrawModel(&gunModel);
 
         glEnable(GL_DEPTH_TEST);
@@ -1360,15 +1853,17 @@ int main(int argc, char* argv[])
             float aspect = (float)win_w / (float)win_h;
 
             float pct = (float)g_PlayerHP / (float)g_PlayerMaxHP;
-            if (pct < 0.0f) pct = 0.0f;
-            if (pct > 1.0f) pct = 1.0f;
+            if (pct < 0.0f)
+                pct = 0.0f;
+            if (pct > 1.0f)
+                pct = 1.0f;
 
             // Barra: menor, no canto inferior esquerdo
             float marginY = 0.04f;
-            float barH    = 0.06f;
-            float barX    = -0.85f;
-            float barY    = -1.0f + marginY;
-            float barW    = 0.55f;
+            float barH = 0.06f;
+            float barX = -0.85f;
+            float barY = -1.0f + marginY;
+            float barW = 0.55f;
 
             // Fundo com transparência (estilo HUD escuro)
             glDisable(GL_DEPTH_TEST);
@@ -1383,28 +1878,34 @@ int main(int argc, char* argv[])
             HUD_DrawRect(barX, barY, fillW, barH, 0.30f, 0.55f, 0.85f, 0.95f);
 
             // Borda inferior/superior (linhas finas)
-            HUD_DrawRect(barX, barY,             barW, 0.005f, 1.0f, 1.0f, 1.0f, 0.45f);
-            HUD_DrawRect(barX, barY + barH,      barW, 0.005f, 1.0f, 1.0f, 1.0f, 0.25f);
+            HUD_DrawRect(barX, barY, barW, 0.005f, 1.0f, 1.0f, 1.0f, 0.45f);
+            HUD_DrawRect(barX, barY + barH, barW, 0.005f, 1.0f, 1.0f, 1.0f, 0.25f);
 
             // Coração à esquerda
             float heartCX = barX - 0.03f;
             float heartCY = barY + barH * 0.5f;
-            float heartH  = barH * 1.5f;
+            float heartH = barH * 1.5f;
             HUD_DrawHeart(heartCX, heartCY, heartH, aspect, 0.30f, 0.85f, 0.55f);
 
             glDisable(GL_BLEND);
             glEnable(GL_DEPTH_TEST);
 
-            // Números: HP grande sobre a barra
+            // 1. Número de HP grande sobre a barra
             char hpStr[16];
-            snprintf(hpStr,  sizeof(hpStr),  "%d", g_PlayerHP);
-
-            TextRendering_SetColor(1.0f, 1.0f, 1.0f);
-            // HP atual, alinhado à esquerda da barra
+            snprintf(hpStr, sizeof(hpStr), "%d", g_PlayerHP);
             TextRendering_PrintString(window, hpStr, barX + 0.012f, barY - 0.012f, 1.8f);
-            TextRendering_SetColor(0.0f, 0.0f, 0.0f); // restaura preto pro FPS
 
-            if (g_PlayerHP <= 0) {
+            // 2. Contador de Munição (Posicionado logo acima do HP)
+            char ammoStr[32];
+            snprintf(ammoStr, sizeof(ammoStr), "MUNICAO: %d / %d", g_PlayerAmmo, g_PlayerMaxAmmo);
+            // barY + 0.09f coloca o texto um pouco acima da barra de vida. A escala 1.2f deixa a fonte num tamanho agradável.
+            TextRendering_SetColor(1.0f, 1.0f, 1.0f); // branco para munição
+            TextRendering_PrintString(window, ammoStr, barX, barY + 0.09f, 1.2f);
+
+            TextRendering_SetColor(0.0f, 0.0f, 0.0f); // restaura preto pro FPS no topo
+
+            if (g_PlayerHP <= 0)
+            {
                 TextRendering_SetColor(1.0f, 0.2f, 0.2f);
                 TextRendering_PrintString(window, "YOU DIED", -0.22f, 0.05f, 3.0f);
                 TextRendering_SetColor(0.0f, 0.0f, 0.0f);

@@ -13,7 +13,8 @@ PS E:\university\courses\2026-1\computacao-grafica-e-visualizacao\cgvis-trabalho
 9. Faça com que o movimento do jogador seja suave, como se ele "escorregasse" bem levemente quando parar de se movimentar em uma direção: 
 10. De maneira similar, faça com que a arma segurada pelo personagem balance de forma natural como em outros jogos quando ele se mexe, mas não deve atrapalhar os disparos da arma.
 11. De maneira similar, faça com que a arma segurada pelo personagem balance de forma natural como em outros jogos quando ele se mexe, mas não deve atrapalhar os disparos da arma.
-12. 
+12. De maneira similar, forneça um contador de munição na UI acima da barra de vida, deve ser apenas um contador com o tanto de projéteis restantes/limite máximo. Forneça apenas as partes necessárias que devem ser mudadas. 
+13. 
 
 Duda: 
 1. when moving, the player is getting stuck on high ledges, I want to be able to fall down regardless of height
