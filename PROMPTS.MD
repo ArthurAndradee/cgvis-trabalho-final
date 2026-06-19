@@ -14,7 +14,7 @@ PS E:\university\courses\2026-1\computacao-grafica-e-visualizacao\cgvis-trabalho
 10. De maneira similar, faça com que a arma segurada pelo personagem balance de forma natural como em outros jogos quando ele se mexe, mas não deve atrapalhar os disparos da arma.
 11. De maneira similar, faça com que a arma segurada pelo personagem balance de forma natural como em outros jogos quando ele se mexe, mas não deve atrapalhar os disparos da arma.
 12. De maneira similar, forneça um contador de munição na UI acima da barra de vida, deve ser apenas um contador com o tanto de projéteis restantes/limite máximo. Forneça apenas as partes necessárias que devem ser mudadas. 
-13. 
+13. Mapeie para que a caixa com health points use o modelo da caixa de pizza, a caixa com munição use o modelo padrão da caixa e os inimigos que estarem disparando projéteis usem o modelo scorpion ao invés do alien:
 
 Duda: 
 1. when moving, the player is getting stuck on high ledges, I want to be able to fall down regardless of height

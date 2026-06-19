@@ -41,14 +41,6 @@ void main()
         color = vec4(0.0, 0.0, 1.0, 1.0); // Azul
         color.rgb = pow(color.rgb, vec3(1.0, 1.0, 1.0) / 2.2);
         return; 
-    } else if (object_id == AMMO_BOX) {
-        color = vec4(0.2, 0.8, 0.2, 1.0); // Verde
-        color.rgb = pow(color.rgb, vec3(1.0, 1.0, 1.0) / 2.2);
-        return; 
-    } else if (object_id == HEALTH_BOX) {
-        color = vec4(0.9, 0.2, 0.4, 1.0); // Vermelho/Rosa
-        color.rgb = pow(color.rgb, vec3(1.0, 1.0, 1.0) / 2.2);
-        return; 
     }
     // =========================================================
 

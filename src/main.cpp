@@ -114,11 +114,11 @@ float g_MapScale = 0.50f;
 glm::vec4 g_CameraPosition = glm::vec4(-2.21f, -2.66f, -9.25f, 1.0f);
 
 // HP do jogador
-int g_PlayerHP = 100;
-const int g_PlayerMaxHP = 100;
+int g_PlayerHP = 100000;
+const int g_PlayerMaxHP = 100000;
 
-int g_PlayerAmmo = 30;           // Munição inicial
-const int g_PlayerMaxAmmo = 100; // Munição máxima que pode carregar
+int g_PlayerAmmo = 100000;           // Munição inicial
+const int g_PlayerMaxAmmo = 100000; // Munição máxima que pode carregar
 
 // Comportamento dos aliens
 #define ALIEN_CHASER 0
@@ -137,21 +137,29 @@ struct EntitySpawn
 };
 
 // Spawns dos Aliens e do Portal (Y Aumentado em +1.0f para caírem de pé)
+// Spawns dos Aliens, do Portal e dos Itens Coletáveis (Coordenadas Atualizadas)
 std::vector<EntitySpawn> mapEntities = {
-    {ALIEN, 4.27f, -1.16f, -14.56f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
-    {ALIEN, -0.34f, -1.51f, -21.68f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.0f, 3, 0.0f},
-    {ALIEN, 6.66f, -1.72f, -25.10f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
-    {ALIEN, 6.92f, -1.09f, -33.12f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.5f, 3, 0.0f},
-    {ALIEN, 5.96f, -0.80f, -30.05f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
-    {ALIEN, -5.96f, -0.02f, -32.90f, 0.5f, 0.0f, ALIEN_SHOOTER, 2.0f, 3, 0.0f},
-    {ALIEN, -4.86f, 2.45f, -36.45f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
-    {ALIEN, 4.77f, 0.59f, -43.51f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.2f, 3, 0.0f},
-    {ALIEN, 4.41f, 0.59f, -44.73f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
-    {ALIEN, 2.10f, 0.49f, -44.06f, 0.5f, 0.0f, ALIEN_CHASER, 0.0f, 3, 0.0f},
-    {PORTAL, 7.22f, 0.69f, -44.22f, 1.0f, 0.0f, 0, 0.0f, 0, 0.0f},
-    {AMMO_BOX, 2.0f, -1.50f, -15.0f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f},
-    {AMMO_BOX, 5.0f, -0.80f, -31.0f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f},
-    {HEALTH_BOX, -3.0f, 2.45f, -36.0f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f}};
+    { ALIEN,   4.27f, -1.16f, -14.56f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,  -0.34f, -1.51f, -21.68f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.0f, 3, 0.0f },
+    { ALIEN,   6.66f, -1.72f, -25.10f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   6.92f, -1.09f, -33.12f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.5f, 3, 0.0f },
+    { ALIEN,   5.96f, -0.80f, -30.05f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,  -5.96f, -0.02f, -32.90f, 0.5f, 0.0f, ALIEN_SHOOTER, 2.0f, 3, 0.0f },
+    { ALIEN,  -4.86f,  2.45f, -36.45f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   4.77f,  0.59f, -43.51f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.2f, 3, 0.0f },
+    { ALIEN,   4.41f,  0.59f, -44.73f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   2.10f,  0.49f, -44.06f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { PORTAL,  7.22f,  0.69f, -44.22f, 1.0f, 0.0f, 0,             0.0f, 0, 0.0f },
+
+    // --- 3 CAIXAS DE MUNIÇÃO RENDERIZADAS COM MODELO PADRÃO (BOX) ---
+    { AMMO_BOX,   5.23f, -2.10f, -14.09f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f }, 
+    { AMMO_BOX,  -4.44f, -2.10f, -25.50f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f },
+    { AMMO_BOX,   7.31f, -1.60f, -31.83f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f },
+
+    // --- 2 CAIXAS DE VIDA RENDERIZADAS COM MODELO DE PIZZA (PIZZAMODEL) ---
+    { HEALTH_BOX, -8.21f, -0.60f, -42.91f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f }, 
+    { HEALTH_BOX,  4.28f, -1.35f, -46.00f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f }
+}; // Spawns dos Aliens, do Portal e dos Itens Coletáveis (Coordenadas Atualizadas)
 
 // --- ESTRUTURA E ARMAZENAMENTO DO PROJÉTIL (BEZIER) ---
 struct Projectile
@@ -242,6 +250,49 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
 
 void Correcao_KeyCallback(int key, int action, int mod);
 
+// --- ESTRUTURAS E FUNÇÕES MOVIDAS PARA RESOLVER DEPENDÊNCIA DE ESCOPO ---
+struct MapTriangle {
+    glm::vec3 v0, v1, v2;
+    glm::vec3 normal;
+    float minX, maxX, minY, maxY, minZ, maxZ;
+    std::string shapeName; 
+};
+std::vector<MapTriangle> g_MapTriangles;
+
+bool RayIntersectsTriangle(glm::vec3 rayOrigin, glm::vec3 rayVector, const MapTriangle& inTriangle, float& outDistance) {
+    const float EPSILON = 0.0000001;
+    glm::vec3 vertex0 = inTriangle.v0;
+    glm::vec3 vertex1 = inTriangle.v1;  
+    glm::vec3 vertex2 = inTriangle.v2;
+    glm::vec3 edge1, edge2, h, s, q;
+    float a, f, u, v;
+    
+    edge1 = vertex1 - vertex0;
+    edge2 = vertex2 - vertex0;
+    h = glm::cross(rayVector, edge2);
+    a = glm::dot(edge1, h);
+    
+    if (a > -EPSILON && a < EPSILON) return false;
+    
+    f = 1.0/a;
+    s = rayOrigin - vertex0;
+    u = f * glm::dot(s, h);
+    if (u < 0.0 || u > 1.0) return false;
+    
+    q = glm::cross(s, edge1);
+    v = f * glm::dot(rayVector, q);
+    if (v < 0.0 || u + v > 1.0) return false;
+    
+    float t = f * glm::dot(edge2, q);
+    if (t > EPSILON) {
+        outDistance = t;
+        return true;
+    } else {
+        return false;
+    }
+}
+// -----------------------------------------------------------------------
+
 void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mod)
 {
     Correcao_KeyCallback(key, action, mod);
@@ -274,10 +325,55 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mod)
         g_AngleZ = 0.0f;
     }
 
-    if (key == GLFW_KEY_L && action == GLFW_PRESS)
+    if (key == GLFW_KEY_G && action == GLFW_PRESS)
     {
         printf("\n[LOCALIZACAO] X: %.2f | Y: %.2f | Z: %.2f\n",
                g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z);
+    }
+
+    // --- FUNÇÃO DA TECLA T (RAYCAST DE TEXTURA) ---
+ // --- FUNÇÃO DA TECLA T (RAYCAST DE TEXTURA) ---
+    if (key == GLFW_KEY_T && action == GLFW_PRESS)
+    {
+        float y = sin(g_CameraPhi);
+        float z = cos(g_CameraPhi) * cos(g_CameraTheta);
+        float x = cos(g_CameraPhi) * sin(g_CameraTheta);
+        glm::vec3 rayVector = glm::normalize(glm::vec3(x, y, z));
+        glm::vec3 rayOrigin = glm::vec3(g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z);
+
+        float closestDistance = 99999.0f;
+        std::string hitShapeName = "";
+
+        // Correção do for loop para compatibilidade C++ antiga
+        for (size_t i = 0; i < g_MapTriangles.size(); ++i) {
+            float dist;
+            if (RayIntersectsTriangle(rayOrigin, rayVector, g_MapTriangles[i], dist)) {
+                if (dist < closestDistance && dist > 0.0f) {
+                    closestDistance = dist;
+                    hitShapeName = g_MapTriangles[i].shapeName;
+                }
+            }
+        }
+
+        if (hitShapeName != "") {
+            GLuint texID = 0;
+            if (g_VirtualScene.find(hitShapeName) != g_VirtualScene.end()) {
+                texID = g_VirtualScene[hitShapeName].texture_id;
+            }
+            
+            std::string texFilename = "Desconhecido/Cor Solida";
+            // Correção do iterador do map
+            for (std::map<std::string, GLuint>::iterator it = g_TextureCache.begin(); it != g_TextureCache.end(); ++it) {
+                if (it->second == texID) {
+                    texFilename = it->first;
+                    break;
+                }
+            }
+            
+            printf("\n[RAYCAST] Olhando para Objeto: %s | Textura ID: %d | Arquivo: %s\n", hitShapeName.c_str(), texID, texFilename.c_str());
+        } else {
+            printf("\n[RAYCAST] Nao esta olhando para nenhuma parede (ou esta muito longe).\n");
+        }
     }
 }
 
@@ -397,26 +493,28 @@ void HUD_DrawHeart(float cx, float cy, float size, float aspect, float r, float 
 // ============================================================================
 // SISTEMA DE FÍSICA OTIMIZADO (COLLISION MESH)
 // ============================================================================
-struct MapTriangle
-{
-    glm::vec3 v0, v1, v2;
-    glm::vec3 normal;
-    float minX, maxX, minY, maxY, minZ, maxZ;
-};
-std::vector<MapTriangle> g_MapTriangles;
 
+// Converte a malha pesada do Obj para um formato super-leve de cálculos de física
 // Converte a malha pesada do Obj para um formato super-leve de cálculos de física
 void BuildPhysicsMesh(const ObjModel &model, float scale)
 {
     g_MapTriangles.clear();
 
-    // Mesmas coordenadas da parede que sumiu
-    float delMinX = 1.0f, delMaxX = 3.0f;
-    float delMinY = -2.5f, delMaxY = 0.5f;
-    float delMinZ = -28.5f, delMaxZ = -27.0f;
-
-    for (const auto &shape : model.shapes)
+    for (size_t shape_idx = 0; shape_idx < model.shapes.size(); ++shape_idx)
     {
+        const auto &shape = model.shapes[shape_idx];
+
+        // --- FILTRO DE EXCLUSÃO ---
+        // Pula a física da porta para o jogador poder atravessar
+        if (shape.name == "bsp_model_5" || 
+            shape.name == "bsp_model_6" ||
+            shape.name == "bsp_model_29_23"
+        ) {
+            continue; 
+        }
+
+        std::string unique_name = shape.name + "_" + std::to_string(shape_idx);
+
         for (size_t f = 0; f < shape.mesh.indices.size() / 3; f++)
         {
             tinyobj::index_t i0 = shape.mesh.indices[3 * f + 0], i1 = shape.mesh.indices[3 * f + 1], i2 = shape.mesh.indices[3 * f + 2];
@@ -426,23 +524,6 @@ void BuildPhysicsMesh(const ObjModel &model, float scale)
             v0 *= scale;
             v1 *= scale;
             v2 *= scale;
-
-            // --- FILTRO DE COLISÃO ---
-            bool deletarColisao = false;
-            glm::vec3 verts[3] = {v0, v1, v2};
-            for (int v = 0; v < 3; v++)
-            {
-                if (verts[v].x >= delMinX && verts[v].x <= delMaxX &&
-                    verts[v].y >= delMinY && verts[v].y <= delMaxY &&
-                    verts[v].z >= delMinZ && verts[v].z <= delMaxZ)
-                {
-                    deletarColisao = true;
-                    break;
-                }
-            }
-            if (deletarColisao)
-                continue;
-            // -------------------------
 
             glm::vec3 cross = glm::cross(v1 - v0, v2 - v0);
             if (glm::length(cross) < 0.0001f)
@@ -460,11 +541,13 @@ void BuildPhysicsMesh(const ObjModel &model, float scale)
             tri.maxY = std::max({v0.y, v1.y, v2.y});
             tri.minZ = std::min({v0.z, v1.z, v2.z});
             tri.maxZ = std::max({v0.z, v1.z, v2.z});
+            
+            tri.shapeName = unique_name; // Guarda a referência!
 
             g_MapTriangles.push_back(tri);
         }
     }
-    printf("- Malha de Fisica gerada com %lu triangulos.\n", g_MapTriangles.size());
+    printf("- Malha de Fisica gerada com %lu triangulos.\n", (unsigned long)g_MapTriangles.size()); // Aviso de cast resolvido
 }
 
 bool CheckAABB(glm::vec3 posA, glm::vec3 sizeA, glm::vec3 posB, glm::vec3 sizeB)
@@ -753,16 +836,17 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel *model, const char *basepath)
     std::vector<float> normal_coefficients;
     std::vector<float> texture_coefficients;
 
-    // Coordenadas passadas para deletar a parede:
-    // [LOCALIZACAO] X: 1.29 | Y: -2.05 | Z: -27.43
-    // [LOCALIZACAO] X: 2.70 | Y: 0.05 | Z: -23.44
-    // Vamos criar uma caixa que envolva esses pontos com uma pequena folga
-    float delMinX = 1.0f, delMaxX = 3.0f;
-    float delMinY = -2.5f, delMaxY = 0.5f;
-    float delMinZ = -28.5f, delMaxZ = -27.0f;
-
     for (size_t shape = 0; shape < model->shapes.size(); ++shape)
     {
+        // --- FILTRO DE EXCLUSÃO ---
+        // Pula a renderização da porta para ela sumir visualmente
+        if (model->shapes[shape].name == "bsp_model_5" || 
+            model->shapes[shape].name == "bsp_model_6" ||
+            model->shapes[shape].name == "bsp_model_29_23"
+        ) {
+            continue; 
+        }
+
         size_t first_index = indices.size();
         size_t num_triangles = model->shapes[shape].mesh.num_face_vertices.size();
         glm::vec3 bbox_min = glm::vec3(std::numeric_limits<float>::max());
@@ -770,36 +854,12 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel *model, const char *basepath)
 
         for (size_t triangle = 0; triangle < num_triangles; ++triangle)
         {
-
-            // --- NOVO: FILTRO PARA DELETAR A PAREDE ---
-            bool deletarTriangulo = false;
-            for (size_t v_test = 0; v_test < 3; ++v_test)
-            {
-                tinyobj::index_t idx_test = model->shapes[shape].mesh.indices[3 * triangle + v_test];
-                float test_x = model->attrib.vertices[3 * idx_test.vertex_index + 0] * g_MapScale;
-                float test_y = model->attrib.vertices[3 * idx_test.vertex_index + 1] * g_MapScale;
-                float test_z = model->attrib.vertices[3 * idx_test.vertex_index + 2] * g_MapScale;
-
-                if (test_x >= delMinX && test_x <= delMaxX &&
-                    test_y >= delMinY && test_y <= delMaxY &&
-                    test_z >= delMinZ && test_z <= delMaxZ)
-                {
-                    deletarTriangulo = true;
-                    break;
-                }
-            }
-            if (deletarTriangulo)
-                continue; // Pula este triângulo, abrindo um buraco no mapa visual!
-            // ------------------------------------------
-
             for (size_t vertex = 0; vertex < 3; ++vertex)
             {
                 tinyobj::index_t idx = model->shapes[shape].mesh.indices[3 * triangle + vertex];
 
-                // Em vez de adicionar direto, precisamos criar os índices sequencialmente baseados no que sobrou
-                // Para não quebrar a ordem do OpenGL, adicionamos "vértices unrolled" (duplicando dados, mas é seguro)
                 size_t current_vertex = model_coefficients.size() / 4;
-                indices.push_back(current_vertex);
+                indices.push_back((GLuint)current_vertex);
 
                 float vx = model->attrib.vertices[3 * idx.vertex_index + 0];
                 float vy = model->attrib.vertices[3 * idx.vertex_index + 1];
@@ -829,7 +889,6 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel *model, const char *basepath)
             }
         }
 
-        // Se a malha inteira foi deletada e sobrou com 0 polígonos, não criamos objeto
         if (indices.size() == first_index)
             continue;
 
@@ -1083,6 +1142,14 @@ int main(int argc, char *argv[])
     ComputeNormals(&quakeMapModel);
     BuildTrianglesAndAddToVirtualScene(&quakeMapModel, "../../assets/quake-e1m1-the-slipgate-complex/source/e1m1/");
 
+    ObjModel scorpionModel("../../assets/scorpion_obj/HO4ZI3DHB4QGYROO5HFQBIK2R.obj");
+    ComputeNormals(&scorpionModel);
+    BuildTrianglesAndAddToVirtualScene(&scorpionModel, "../../assets/scorpion_obj/");
+
+    ObjModel pizzaModel("../../assets/pizza-box_obj/IXTJN0D8HCSIG6PTOAWHF46UO.obj");
+    ComputeNormals(&pizzaModel);
+    BuildTrianglesAndAddToVirtualScene(&pizzaModel, "../../assets/pizza-box_obj/");
+
     // PRÉ-COMPUTA A FÍSICA PARA 60FPS
     BuildPhysicsMesh(quakeMapModel, g_MapScale);
 
@@ -1148,142 +1215,59 @@ int main(int argc, char *argv[])
         if (glm::length(right_walk) > 0.0f)
             right_walk = glm::normalize(right_walk);
 
+// ------------------------------------------------------------------------------------
+        // FÍSICA CLÁSSICA DO JOGADOR (Movimentação exata, sem deslize)
         // ------------------------------------------------------------------------------------
-        // FÍSICA OTIMIZADA DO JOGADOR (Mecânica de "Escorregar"/Friction do Quake)
-        // ------------------------------------------------------------------------------------
-        // Essa variável guarda o embalo do jogador. Como é "static", ela sobrevive a cada frame do "while".
-        static glm::vec3 playerVelocityXZ(0.0f, 0.0f, 0.0f);
-
-        // 1. Pega a direção que o jogador está tentando ir com o teclado
-        glm::vec3 inputDirection(0.0f, 0.0f, 0.0f);
-        if (g_WPressed)
-            inputDirection += forward_walk;
-        if (g_SPressed)
-            inputDirection -= forward_walk;
-        if (g_APressed)
-            inputDirection -= right_walk;
-        if (g_DPressed)
-            inputDirection += right_walk;
-
-        if (glm::length(inputDirection) > 0.0f)
-        {
-            inputDirection = glm::normalize(inputDirection); // Normaliza para não andar mais rápido na diagonal
-        }
-
-        // 2. Parâmetros de aceleração e atrito
-        float ACCELERATION = 40.0f; // O quão rápido ele chega na velocidade máxima
-        float FRICTION = 10.0f;     // O quanto o chão freia ele (menor = escorrega mais)
-        float MAX_SPEED = 8.0f;     // Velocidade máxima permitida
-
-        // Se o jogador está no ar, ele tem menos atrito (Air Strafe leve)
-        if (playerVelocityY != 0.0f)
-        {
-            FRICTION = 2.0f;
-            ACCELERATION = 15.0f;
-        }
-
-        // 3. Aplica Aceleração ou Atrito na Velocidade Atual
-        if (glm::length(inputDirection) > 0.0f)
-        {
-            // Acelera na direção das teclas
-            playerVelocityXZ += inputDirection * ACCELERATION * deltaTime;
-
-            // Limita para não passar do MAX_SPEED
-            if (glm::length(playerVelocityXZ) > MAX_SPEED)
-            {
-                playerVelocityXZ = glm::normalize(playerVelocityXZ) * MAX_SPEED;
-            }
-        }
-        else
-        {
-            // Nenhuma tecla apertada: aplica o Atrito para escorregar até parar
-            float currentSpeed = glm::length(playerVelocityXZ);
-            if (currentSpeed > 0.0f)
-            {
-                float drop = currentSpeed * FRICTION * deltaTime; // Freia proporcional à velocidade
-                float newSpeed = currentSpeed - drop;
-                if (newSpeed < 0.0f)
-                    newSpeed = 0.0f; // Se passar de zero, para totalmente
-                playerVelocityXZ = (playerVelocityXZ / currentSpeed) * newSpeed;
-            }
-        }
-
-        // 4. Calcula a nova posição de destino usando a inércia
+        float speed = 8.0f * deltaTime; 
+        
         glm::vec3 nextPos = glm::vec3(g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z);
-        nextPos += playerVelocityXZ * deltaTime;
+
+        if (g_WPressed) nextPos += forward_walk * speed;
+        if (g_SPressed) nextPos -= forward_walk * speed;
+        if (g_APressed) nextPos -= right_walk * speed;
+        if (g_DPressed) nextPos += right_walk * speed;
+
+        // Calcula uma "velocidade" falsa apenas para a animação da arma continuar balançando
+        glm::vec3 playerVelocityXZ(0.0f, 0.0f, 0.0f);
+        if (g_WPressed) playerVelocityXZ += forward_walk * 8.0f;
+        if (g_SPressed) playerVelocityXZ -= forward_walk * 8.0f;
+        if (g_APressed) playerVelocityXZ -= right_walk * 8.0f;
+        if (g_DPressed) playerVelocityXZ += right_walk * 8.0f;
 
         // FÍSICA 1: Colisão com paredes (com step-up estilo Quake)
-        // Tenta o movimento normal. Se bloqueado, tenta de novo com os pés erguidos
-        // STEP_HEIGHT — assim degraus e bumps pequenos são galgados sem pular.
         glm::vec3 nextPosFlat = nextPos;
         bool wasGrounded = (playerVelocityY == 0.0f); // estado pré-gravidade deste frame
         bool moved = false;
 
-        // Anti-out-of-bounds: se estamos no chão, recusa qualquer XZ que não tenha
-        // chão em lugar algum debaixo (ResolveFloorHeight devolve -9999 nesse caso).
-        // No ar, deixa passar (queda livre legítima).
-        auto destHasFloor = [&](float x, float z) -> bool
-        {
-            if (!wasGrounded)
-                return true;
+        // Anti-out-of-bounds: se estamos no chão, recusa qualquer XZ que não tenha chão
+        auto destHasFloor = [&](float x, float z) -> bool {
+            if (!wasGrounded) return true;
             float fy = ResolveFloorHeight(x, g_CameraPosition.y, z);
             return fy > -9000.0f;
         };
 
         if (destHasFloor(nextPosFlat.x, nextPosFlat.z) &&
             !CheckWallCollision(nextPosFlat.x, nextPosFlat.y - PLAYER_HEIGHT, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-            !CheckEntityCollision(nextPosFlat, PLAYER_RADIUS, PLAYER_HEIGHT))
-        {
+            !CheckEntityCollision(nextPosFlat, PLAYER_RADIUS, PLAYER_HEIGHT)) {
             g_CameraPosition.x = nextPosFlat.x;
             g_CameraPosition.z = nextPosFlat.z;
             moved = true;
-        }
-        else
-        {
-            // Tenta mover APENAS no eixo X (Deslizar)
-            if (destHasFloor(nextPosFlat.x, g_CameraPosition.z) &&
-                !CheckWallCollision(nextPosFlat.x, nextPosFlat.y - PLAYER_HEIGHT, g_CameraPosition.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-                !CheckEntityCollision(glm::vec3(nextPosFlat.x, nextPosFlat.y, g_CameraPosition.z), PLAYER_RADIUS, PLAYER_HEIGHT))
-            {
-                g_CameraPosition.x = nextPosFlat.x;
-                playerVelocityXZ.z = 0.0f; // Perde o embalo no eixo que bateu
-                moved = true;
-            }
-            // Tenta mover APENAS no eixo Z (Deslizar)
-            else if (destHasFloor(g_CameraPosition.x, nextPosFlat.z) &&
-                     !CheckWallCollision(g_CameraPosition.x, nextPosFlat.y - PLAYER_HEIGHT, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-                     !CheckEntityCollision(glm::vec3(g_CameraPosition.x, nextPosFlat.y, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT))
-            {
-                g_CameraPosition.z = nextPosFlat.z;
-                playerVelocityXZ.x = 0.0f; // Perde o embalo no eixo que bateu
-                moved = true;
-            }
-            else
-            {
-                // Se bateu reto num "L", zera a velocidade pros dois lados
-                playerVelocityXZ = glm::vec3(0.0f);
-            }
-        }
-
-        // Tenta fazer o step-up só se a lógica de cima falhou em mover
-        if (!moved && playerVelocityY <= 0.01f)
-        {
+        } else if (playerVelocityY <= 0.01f) {
+            // No chão (ou caindo): tenta step-up / step-off
             float raisedFootY = (g_CameraPosition.y - PLAYER_HEIGHT) + STEP_HEIGHT;
             if (destHasFloor(nextPosFlat.x, nextPosFlat.z) &&
                 !CheckWallCollision(nextPosFlat.x, raisedFootY, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT) &&
-                !CheckEntityCollision(glm::vec3(nextPosFlat.x, g_CameraPosition.y + STEP_HEIGHT, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT))
-            {
-
+                !CheckEntityCollision(glm::vec3(nextPosFlat.x, g_CameraPosition.y + STEP_HEIGHT, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT)) {
+                
                 float candidateFloor = ResolveFloorHeight(nextPosFlat.x, raisedFootY, nextPosFlat.z);
                 float currentFoot = g_CameraPosition.y - PLAYER_HEIGHT;
                 float climb = candidateFloor - currentFoot;
 
                 g_CameraPosition.x = nextPosFlat.x;
                 g_CameraPosition.z = nextPosFlat.z;
-                if (climb > 0.0f && climb <= STEP_HEIGHT + 0.01f)
-                {
-                    g_CameraPosition.y += climb;
-                    cameraYSmooth -= climb;
+                if (climb > 0.0f && climb <= STEP_HEIGHT + 0.01f) {
+                    g_CameraPosition.y += climb;     
+                    cameraYSmooth -= climb;          
                     playerVelocityY = 0.0f;
                 }
                 moved = true;
@@ -1607,7 +1591,12 @@ int main(int argc, char *argv[])
 
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                 glUniform1i(g_object_id_uniform, ALIEN);
-                DrawModel(&alienModel);
+                // Mapeamento condicional do modelo
+                if (ent.behavior == ALIEN_SHOOTER) {
+                    DrawModel(&scorpionModel);
+                } else {
+                    DrawModel(&alienModel);
+                }
                 glUniform1f(g_hit_flash_uniform, 0.0f); // restaura para próximos draws
             }
             else if (ent.type == BOX)
@@ -1632,13 +1621,19 @@ int main(int argc, char *argv[])
                 glUniform1i(g_object_id_uniform, PORTAL);
                 DrawModel(&boxModel);
             }
-            else if (ent.type == AMMO_BOX || ent.type == HEALTH_BOX)
+            else if (ent.type == AMMO_BOX)
             {
-                // Rotaciona a caixa lentamente (para destacar como item coletável)
                 model = Matrix_Translate(ent.x, ent.y + 0.15f, ent.z) * Matrix_Rotate_Y(currentTime * 2.0f) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                glUniform1i(g_object_id_uniform, ent.type); // Envia o ID para o shader pintar diferente
-                DrawModel(&boxModel);
+                glUniform1i(g_object_id_uniform, AMMO_BOX); 
+                DrawModel(&boxModel); // Modelo padrão da caixa
+            }
+            else if (ent.type == HEALTH_BOX)
+            {
+                model = Matrix_Translate(ent.x, ent.y + 0.15f, ent.z) * Matrix_Rotate_Y(currentTime * 2.0f) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, HEALTH_BOX); 
+                DrawModel(&pizzaModel); // Modelo da Caixa de Pizza
             }
         }
 
