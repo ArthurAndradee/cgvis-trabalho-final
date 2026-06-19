@@ -100,7 +100,7 @@ float g_AngleZ = 0.0f;
 bool g_LeftMouseButtonPressed = false;
 bool g_RightMouseButtonPressed = false;
 bool g_MiddleMouseButtonPressed = false;
-float g_CameraTheta = 0.0f;
+float g_CameraTheta = 3.141592f; // spawn olhando p frente
 float g_CameraPhi = 0.0f;
 float g_CameraDistance = 3.5f;
 
@@ -114,10 +114,10 @@ float g_MapScale = 0.50f;
 glm::vec4 g_CameraPosition = glm::vec4(-2.21f, -2.66f, -9.25f, 1.0f);
 
 // HP do jogador
-int g_PlayerHP = 100000;
-const int g_PlayerMaxHP = 100000;
+int g_PlayerHP = 100;
+const int g_PlayerMaxHP = 100;
 
-int g_PlayerAmmo = 100000;           // Munição inicial
+int g_PlayerAmmo = 250;           // Munição inicial
 const int g_PlayerMaxAmmo = 100000; // Munição máxima que pode carregar
 
 // Comportamento dos aliens
@@ -1239,9 +1239,12 @@ int main(int argc, char *argv[])
         bool wasGrounded = (playerVelocityY == 0.0f); // estado pré-gravidade deste frame
         bool moved = false;
 
-        // Anti-out-of-bounds: se estamos no chão, recusa qualquer XZ que não tenha chão
+        // Anti-out-of-bounds: recusa qualquer XZ que não tenha chão em lugar
+        // algum embaixo (ResolveFloorHeight devolve -9999 nesse caso). Vale
+        // tanto no chão quanto no ar — pulos ou knockback não podem cuspir
+        // o jogador no vazio. Cair de penhasco ainda funciona porque há chão
+        // (mais baixo) embaixo do destino.
         auto destHasFloor = [&](float x, float z) -> bool {
-            if (!wasGrounded) return true;
             float fy = ResolveFloorHeight(x, g_CameraPosition.y, z);
             return fy > -9000.0f;
         };
@@ -1521,14 +1524,16 @@ int main(int argc, char *argv[])
                                 ent.z = bZ;
                             }
 
-                            // Empurra jogador para trás também
+                            // empurra o jogador pra trás, mas só se tiver chão no destino
                             glm::vec3 pushPos = glm::vec3(
                                 g_CameraPosition.x + ndirX * PLAYER_KNOCKBACK,
                                 g_CameraPosition.y,
-                                g_CameraPosition.z + ndirZ * PLAYER_KNOCKBACK);
-                            if (!CheckWallCollision(pushPos.x, pushPos.y - PLAYER_HEIGHT, pushPos.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-                                !CheckEntityCollision(pushPos, PLAYER_RADIUS, PLAYER_HEIGHT))
-                            {
+                                g_CameraPosition.z + ndirZ * PLAYER_KNOCKBACK
+                            );
+                            float pushFloorY = ResolveFloorHeight(pushPos.x, g_CameraPosition.y, pushPos.z);
+                            if (pushFloorY > -9000.0f &&
+                                !CheckWallCollision(pushPos.x, pushPos.y - PLAYER_HEIGHT, pushPos.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
+                                !CheckEntityCollision(pushPos, PLAYER_RADIUS, PLAYER_HEIGHT)) {
                                 g_CameraPosition.x = pushPos.x;
                                 g_CameraPosition.z = pushPos.z;
                             }
@@ -1623,16 +1628,21 @@ int main(int argc, char *argv[])
             }
             else if (ent.type == AMMO_BOX)
             {
+                // Gruda no chão (procura piso a partir de bem alto pra não pegar o teto)
+                float floor = ResolveFloorHeight(ent.x, ent.y + 2.0f, ent.z);
+                if (floor > -9000.0f) ent.y = floor;
                 model = Matrix_Translate(ent.x, ent.y + 0.15f, ent.z) * Matrix_Rotate_Y(currentTime * 2.0f) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                glUniform1i(g_object_id_uniform, AMMO_BOX); 
+                glUniform1i(g_object_id_uniform, AMMO_BOX);
                 DrawModel(&boxModel); // Modelo padrão da caixa
             }
             else if (ent.type == HEALTH_BOX)
             {
+                float floor = ResolveFloorHeight(ent.x, ent.y + 2.0f, ent.z);
+                if (floor > -9000.0f) ent.y = floor;
                 model = Matrix_Translate(ent.x, ent.y + 0.15f, ent.z) * Matrix_Rotate_Y(currentTime * 2.0f) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                glUniform1i(g_object_id_uniform, HEALTH_BOX); 
+                glUniform1i(g_object_id_uniform, HEALTH_BOX);
                 DrawModel(&pizzaModel); // Modelo da Caixa de Pizza
             }
         }
