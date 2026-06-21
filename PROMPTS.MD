@@ -23,3 +23,4 @@ Duda:
 5. can we make the hp hud look somewhat like this (print da hud do exemplo)
 6. can you implement a third person camera that we can toggle by pressing C? the player can be just a placeholder box for now
 7. I've messed around with the chaser wall collision height to try and get it to be able to come down small steps but they still get stuck so I think the issue is that CheckWallCollision treats these steps as walls and prevents stepping across. can we make another version of this function for the chaser which allows it to come down?
+8. third person camera is too zoomed out so i can see map stuff around can we confine the camera

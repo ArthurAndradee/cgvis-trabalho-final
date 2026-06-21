@@ -1371,13 +1371,33 @@ int main(int argc, char *argv[])
         cameraEye.y += cameraYSmooth;
 
         // Câmera de terceira pessoa: posiciona o olho atrás do jogador, na
-        // direção oposta ao view vector. O view vector continua o mesmo, então
-        // a câmera "olha através" do jogador para onde ele aponta.
+        // direção oposta ao view vector. Se houver uma parede entre o jogador
+        // e o destino desejado, encurta a distância pra câmera não atravessar.
         if (g_ThirdPerson) {
-            float dist = 3.5f; // distância fixa atrás do jogador
-            cameraEye.x = g_CameraPosition.x - camera_view_vector.x * dist;
-            cameraEye.y = g_CameraPosition.y - camera_view_vector.y * dist + 0.8f;
-            cameraEye.z = g_CameraPosition.z - camera_view_vector.z * dist;
+            const float desiredDist = 3.5f;
+            const float minDist     = 0.6f;
+            const float yLift       = 0.8f;
+            const float camRadius   = 0.25f;
+            const float probeStep   = 0.15f;
+
+            // Ponto-pivô: pé do jogador + uma altura de olho (igual ao 1ª pessoa)
+            glm::vec3 pivot(g_CameraPosition.x, g_CameraPosition.y + yLift, g_CameraPosition.z);
+            glm::vec3 back(-camera_view_vector.x, -camera_view_vector.y, -camera_view_vector.z);
+
+            // Varre de minDist até desiredDist; para no primeiro ponto com parede.
+            float chosenDist = desiredDist;
+            for (float d = minDist; d <= desiredDist; d += probeStep) {
+                glm::vec3 sample = pivot + back * d;
+                if (CheckWallCollision(sample.x, sample.y - 0.5f, sample.z, camRadius, 1.0f)) {
+                    chosenDist = std::max(minDist, d - probeStep);
+                    break;
+                }
+                chosenDist = d;
+            }
+
+            cameraEye.x = pivot.x + back.x * chosenDist;
+            cameraEye.y = pivot.y + back.y * chosenDist;
+            cameraEye.z = pivot.z + back.z * chosenDist;
         }
 
         glm::mat4 viewMundo = Matrix_Camera_View(cameraEye, camera_view_vector, camera_up_vector);
