@@ -103,6 +103,7 @@ bool g_MiddleMouseButtonPressed = false;
 float g_CameraTheta = 3.141592f; // spawn olhando p frente
 float g_CameraPhi = 0.0f;
 float g_CameraDistance = 3.5f;
+bool  g_ThirdPerson = false; // Toggle de câmera (C)
 
 // ============================================================================
 // CONFIGURAÇÕES DA FASE E ENTIDADES
@@ -329,6 +330,12 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mod)
     {
         printf("\n[LOCALIZACAO] X: %.2f | Y: %.2f | Z: %.2f\n",
                g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z);
+    }
+
+    // Alterna entre câmera primeira pessoa e terceira pessoa
+    if (key == GLFW_KEY_C && action == GLFW_PRESS)
+    {
+        g_ThirdPerson = !g_ThirdPerson;
     }
 
     // --- FUNÇÃO DA TECLA T (RAYCAST DE TEXTURA) ---
@@ -1331,6 +1338,16 @@ int main(int argc, char *argv[])
         glm::vec4 cameraEye = g_CameraPosition;
         cameraEye.y += cameraYSmooth;
 
+        // Câmera de terceira pessoa: posiciona o olho atrás do jogador, na
+        // direção oposta ao view vector. O view vector continua o mesmo, então
+        // a câmera "olha através" do jogador para onde ele aponta.
+        if (g_ThirdPerson) {
+            float dist = 3.5f; // distância fixa atrás do jogador
+            cameraEye.x = g_CameraPosition.x - camera_view_vector.x * dist;
+            cameraEye.y = g_CameraPosition.y - camera_view_vector.y * dist + 0.8f;
+            cameraEye.z = g_CameraPosition.z - camera_view_vector.z * dist;
+        }
+
         glm::mat4 viewMundo = Matrix_Camera_View(cameraEye, camera_view_vector, camera_up_vector);
         glm::mat4 projection = Matrix_Perspective(3.141592 / 3.0f, g_ScreenRatio, -0.1f, -500.0f);
 
@@ -1343,6 +1360,20 @@ int main(int argc, char *argv[])
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, WALL);
         DrawModel(&quakeMapModel);
+
+        // Corpo do jogador (placeholder em terceira pessoa). Y aponta para o
+        // pé do jogador (g_CameraPosition.y - PLAYER_HEIGHT) e a caixa sobe
+        // PLAYER_HEIGHT de altura.
+        if (g_ThirdPerson) {
+            float bodyYaw = g_CameraTheta;
+            float footY = g_CameraPosition.y - PLAYER_HEIGHT + cameraYSmooth;
+            model = Matrix_Translate(g_CameraPosition.x, footY + PLAYER_HEIGHT * 0.5f, g_CameraPosition.z)
+                  * Matrix_Rotate_Y(bodyYaw)
+                  * Matrix_Scale(0.35f, PLAYER_HEIGHT * 0.5f, 0.35f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, BOX);
+            DrawModel(&boxModel);
+        }
 
         // --- SEPARAÇÃO ALIEN x ALIEN (anti-overlap) ---
         // Empurra pares de aliens que estão muito próximos. Roda antes da IA.
@@ -1836,17 +1867,21 @@ int main(int argc, char *argv[])
         glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(Matrix_Identity()));
         glDisable(GL_DEPTH_TEST);
 
-        // Aplica o Offset calculado (gunOffsetX, gunOffsetY) à translação base da arma esquerda
-        model = Matrix_Translate(-0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetL) * Matrix_Rotate_Y(3.141592f + 0.01f) * Matrix_Rotate_X(0.20f) * Matrix_Scale(2.2f, 2.2f, 2.2f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, GUN);
-        DrawModel(&gunModel);
+        // Em terceira pessoa, esconde as armas em "viewmodel" (elas pertencem
+        // ao corpo do jogador, não à câmera). HUD continua sendo desenhado.
+        if (!g_ThirdPerson) {
+            // Aplica o Offset calculado (gunOffsetX, gunOffsetY) à translação base da arma esquerda
+            model = Matrix_Translate(-0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetL) * Matrix_Rotate_Y(3.141592f + 0.01f) * Matrix_Rotate_X(0.20f) * Matrix_Scale(2.2f, 2.2f, 2.2f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, GUN);
+            DrawModel(&gunModel);
 
-        // Aplica o Offset calculado (gunOffsetX, gunOffsetY) à translação base da arma direita
-        model = Matrix_Translate(0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetR) * Matrix_Rotate_Y(3.141592f - 0.01f) * Matrix_Rotate_X(0.20f) * Matrix_Scale(2.2f, 2.2f, 2.2f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, GUN);
-        DrawModel(&gunModel);
+            // Aplica o Offset calculado (gunOffsetX, gunOffsetY) à translação base da arma direita
+            model = Matrix_Translate(0.4f + gunOffsetX, -2.0f + gunOffsetY, -2.0f + recoilOffsetR) * Matrix_Rotate_Y(3.141592f - 0.01f) * Matrix_Rotate_X(0.20f) * Matrix_Scale(2.2f, 2.2f, 2.2f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, GUN);
+            DrawModel(&gunModel);
+        }
 
         glEnable(GL_DEPTH_TEST);
         TextRendering_ShowFramesPerSecond(window);

@@ -12,9 +12,8 @@ PS E:\university\courses\2026-1\computacao-grafica-e-visualizacao\cgvis-trabalho
 8. E como eu poderia usar um mapa já pronto? como eu poderia encontrar o mapa Quake 1 Demo?
 9. Faça com que o movimento do jogador seja suave, como se ele "escorregasse" bem levemente quando parar de se movimentar em uma direção: 
 10. De maneira similar, faça com que a arma segurada pelo personagem balance de forma natural como em outros jogos quando ele se mexe, mas não deve atrapalhar os disparos da arma.
-11. De maneira similar, faça com que a arma segurada pelo personagem balance de forma natural como em outros jogos quando ele se mexe, mas não deve atrapalhar os disparos da arma.
-12. De maneira similar, forneça um contador de munição na UI acima da barra de vida, deve ser apenas um contador com o tanto de projéteis restantes/limite máximo. Forneça apenas as partes necessárias que devem ser mudadas. 
-13. Mapeie para que a caixa com health points use o modelo da caixa de pizza, a caixa com munição use o modelo padrão da caixa e os inimigos que estarem disparando projéteis usem o modelo scorpion ao invés do alien:
+11. De maneira similar, forneça um contador de munição na UI acima da barra de vida, deve ser apenas um contador com o tanto de projéteis restantes/limite máximo. Forneça apenas as partes necessárias que devem ser mudadas. 
+12. Mapeie para que a caixa com health points use o modelo da caixa de pizza, a caixa com munição use o modelo padrão da caixa e os inimigos que estarem disparando projéteis usem o modelo scorpion ao invés do alien:
 
 Duda: 
 1. when moving, the player is getting stuck on high ledges, I want to be able to fall down regardless of height
@@ -22,3 +21,4 @@ Duda:
 3. fix enemy+enemy collision so that they don't overlap and  can we have some of them standing still and shooting slow moving projectiles (that the player is supposed to be able to doge) instead of chasing
 4. make it visible when enemies are hit like blinking red
 5. can we make the hp hud look somewhat like this (print da hud do exemplo)
+6. can you implement a third person camera that we can toggle by pressing C? the player can be just a placeholder box for now
