@@ -1193,6 +1193,10 @@ int main(int argc, char *argv[])
     ComputeNormals(&jillModel);
     BuildTrianglesAndAddToVirtualScene(&jillModel, "../../assets/jill/");
 
+    ObjModel projectileModel("../../assets/projectile/NODGA7BB7QGM8WII5GZU54ZQQ.obj");
+    ComputeNormals(&projectileModel);
+    BuildTrianglesAndAddToVirtualScene(&projectileModel, "../../assets/projectile/");
+
     // PRÉ-COMPUTA A FÍSICA PARA 60FPS
     BuildPhysicsMesh(quakeMapModel, g_MapScale);
 
@@ -1880,10 +1884,13 @@ int main(int argc, char *argv[])
                     yaw = atan2f(vd.x, vd.z);
                     pitch = asinf(-vd.y);
                 }
-                model = Matrix_Translate(ep.pos.x, ep.pos.y, ep.pos.z) * Matrix_Rotate_Y(yaw) * Matrix_Rotate_X(pitch) * Matrix_Scale(0.06f, 0.06f, 0.4f);
+                
+                model = Matrix_Translate(ep.pos.x, ep.pos.y, ep.pos.z)
+                      * Matrix_Rotate_Y(yaw) * Matrix_Rotate_X(pitch)
+                      * Matrix_Scale(0.08f, 0.08f, 0.08f);
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                glUniform1i(g_object_id_uniform, BULLET);
-                DrawVirtualObject("laser_cylinder");
+                glUniform1i(g_object_id_uniform, BOX);
+                DrawModel(&projectileModel);
             }
             g_EnemyProjectiles.erase(
                 std::remove_if(g_EnemyProjectiles.begin(), g_EnemyProjectiles.end(),
