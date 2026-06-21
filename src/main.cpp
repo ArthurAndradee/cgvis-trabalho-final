@@ -122,8 +122,8 @@ int g_PlayerAmmo = 250;           // Munição inicial
 const int g_PlayerMaxAmmo = 100000; // Munição máxima que pode carregar
 
 // Comportamento dos aliens
-#define ALIEN_CHASER 0
-#define ALIEN_SHOOTER 1
+#define CHASER 0
+#define SHOOTER 1
 
 struct EntitySpawn
 {
@@ -131,7 +131,7 @@ struct EntitySpawn
     float x, y, z;
     float scale;
     float hitCooldown;   // segundos restantes ate poder bater no jogador de novo
-    int behavior;        // ALIEN_CHASER ou ALIEN_SHOOTER (ignorado para nao-aliens)
+    int behavior;        // CHASER ou SHOOTER (ignorado para nao-aliens)
     float shootCooldown; // segundos ate poder atirar de novo (apenas SHOOTER)
     int hp;              // pontos de vida (apenas aliens)
     float hitFlash;      // segundos de pisca-pisca vermelho restantes
@@ -140,16 +140,16 @@ struct EntitySpawn
 // Spawns dos Aliens e do Portal (Y Aumentado em +1.0f para caírem de pé)
 // Spawns dos Aliens, do Portal e dos Itens Coletáveis (Coordenadas Atualizadas)
 std::vector<EntitySpawn> mapEntities = {
-    { ALIEN,   4.27f, -1.16f, -14.56f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,  -0.34f, -1.51f, -21.68f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.0f, 3, 0.0f },
-    { ALIEN,   6.66f, -1.72f, -25.10f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,   6.92f, -1.09f, -33.12f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.5f, 3, 0.0f },
-    { ALIEN,   5.96f, -0.80f, -30.05f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,  -5.96f, -0.02f, -32.90f, 0.5f, 0.0f, ALIEN_SHOOTER, 2.0f, 3, 0.0f },
-    { ALIEN,  -4.86f,  2.45f, -36.45f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,   4.77f,  0.59f, -43.51f, 0.5f, 0.0f, ALIEN_SHOOTER, 1.2f, 3, 0.0f },
-    { ALIEN,   4.41f,  0.59f, -44.73f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
-    { ALIEN,   2.10f,  0.49f, -44.06f, 0.5f, 0.0f, ALIEN_CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   4.27f, -1.16f, -14.56f, 0.5f, 0.0f, CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,  -0.34f, -1.51f, -21.68f, 0.5f, 0.0f, SHOOTER, 1.0f, 3, 0.0f },
+    { ALIEN,   6.66f, -1.72f, -25.10f, 0.5f, 0.0f, CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   6.92f, -1.09f, -33.12f, 0.5f, 0.0f, SHOOTER, 1.5f, 3, 0.0f },
+    { ALIEN,   5.96f, -0.80f, -30.05f, 0.5f, 0.0f, CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,  -5.96f, -0.02f, -32.90f, 0.5f, 0.0f, SHOOTER, 2.0f, 3, 0.0f },
+    { ALIEN,  -4.86f,  2.45f, -36.45f, 0.5f, 0.0f, CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   4.77f,  0.59f, -43.51f, 0.5f, 0.0f, SHOOTER, 1.2f, 3, 0.0f },
+    { ALIEN,   4.41f,  0.59f, -44.73f, 0.5f, 0.0f, CHASER,  0.0f, 3, 0.0f },
+    { ALIEN,   2.10f,  0.49f, -44.06f, 0.5f, 0.0f, CHASER,  0.0f, 3, 0.0f },
     { PORTAL,  7.22f,  0.69f, -44.22f, 1.0f, 0.0f, 0,             0.0f, 0, 0.0f },
 
     // --- 3 CAIXAS DE MUNIÇÃO RENDERIZADAS COM MODELO PADRÃO (BOX) ---
@@ -1474,7 +1474,7 @@ int main(int argc, char *argv[])
                     float ndirX = dirX / dist;
                     float ndirZ = dirZ / dist;
 
-                    if (ent.behavior == ALIEN_CHASER)
+                    if (ent.behavior == CHASER)
                     {
                         // Só avança se ainda não está no alcance corpo a corpo
                         if (dist > MELEE_RANGE)
@@ -1574,7 +1574,7 @@ int main(int argc, char *argv[])
                         alienBobbingY = abs(sin(currentTime * runAnimSpeed)) * 0.15f;
                         alienWobbleZ = cos(currentTime * runAnimSpeed * 0.5f) * 0.15f;
                     }
-                    else if (ent.behavior == ALIEN_SHOOTER)
+                    else if (ent.behavior == SHOOTER)
                     {
                         // Atirador: parado, dispara projeteis lentos quando o cooldown zera
                         ent.shootCooldown -= deltaTime;
@@ -1608,7 +1608,7 @@ int main(int argc, char *argv[])
                 float angle = atan2(dirX, dirZ);
                 
                 // offsets diferentes pros modelos
-                float modelYOffset = (ent.behavior == ALIEN_SHOOTER) ? 0.65f : 0.1f;
+                float modelYOffset = (ent.behavior == SHOOTER) ? 0.65f : 0.1f;
                 model = Matrix_Translate(ent.x, ent.y + alienBobbingY + modelYOffset, ent.z) * Matrix_Rotate_Y(angle + 1.5708f) * Matrix_Rotate_Z(alienWobbleZ) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
 
                 // Pisca-pisca ao ser baleado: decai e alterna intensidade
@@ -1630,7 +1630,7 @@ int main(int argc, char *argv[])
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                 glUniform1i(g_object_id_uniform, ALIEN);
                 // Mapeamento condicional do modelo
-                if (ent.behavior == ALIEN_SHOOTER) {
+                if (ent.behavior == SHOOTER) {
                     DrawModel(&alienModel);
                 } else {
                     DrawModel(&scorpionModel);
