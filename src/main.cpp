@@ -1189,6 +1189,10 @@ int main(int argc, char *argv[])
     ComputeNormals(&pizzaModel);
     BuildTrianglesAndAddToVirtualScene(&pizzaModel, "../../assets/pizza-box_obj/");
 
+    ObjModel jillModel("../../assets/jill/RL5OZYCN4E44DVCXSULG0X7AV.obj");
+    ComputeNormals(&jillModel);
+    BuildTrianglesAndAddToVirtualScene(&jillModel, "../../assets/jill/");
+
     // PRÉ-COMPUTA A FÍSICA PARA 60FPS
     BuildPhysicsMesh(quakeMapModel, g_MapScale);
 
@@ -1413,18 +1417,18 @@ int main(int argc, char *argv[])
         glUniform1i(g_object_id_uniform, WALL);
         DrawModel(&quakeMapModel);
 
-        // Corpo do jogador (placeholder em terceira pessoa). Y aponta para o
-        // pé do jogador (g_CameraPosition.y - PLAYER_HEIGHT) e a caixa sobe
-        // PLAYER_HEIGHT de altura.
+        // jill as third person model 
         if (g_ThirdPerson) {
-            float bodyYaw = g_CameraTheta;
+            float bodyYaw = g_CameraTheta - 1.5708f; // rotaciona em pi/2
             float footY = g_CameraPosition.y - PLAYER_HEIGHT + cameraYSmooth;
+            float jillHeight = 2.5f;
+            float jillScale  = PLAYER_HEIGHT / jillHeight;
             model = Matrix_Translate(g_CameraPosition.x, footY + PLAYER_HEIGHT * 0.5f, g_CameraPosition.z)
                   * Matrix_Rotate_Y(bodyYaw)
-                  * Matrix_Scale(0.35f, PLAYER_HEIGHT * 0.5f, 0.35f);
+                  * Matrix_Scale(jillScale, jillScale, jillScale);
             glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
             glUniform1i(g_object_id_uniform, BOX);
-            DrawModel(&boxModel);
+            DrawModel(&jillModel);
         }
 
         // --- SEPARAÇÃO ALIEN x ALIEN (anti-overlap) ---
