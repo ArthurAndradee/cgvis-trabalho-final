@@ -1606,8 +1606,10 @@ int main(int argc, char *argv[])
                 }
 
                 float angle = atan2(dirX, dirZ);
-                // OFFSET DE 0.65f ADICIONADO PARA NÃO FICAR ENTERRADO
-                model = Matrix_Translate(ent.x, ent.y + alienBobbingY + 0.65f, ent.z) * Matrix_Rotate_Y(angle + 1.5708f) * Matrix_Rotate_Z(alienWobbleZ) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
+                
+                // offsets diferentes pros modelos
+                float modelYOffset = (ent.behavior == ALIEN_SHOOTER) ? 0.65f : 0.1f;
+                model = Matrix_Translate(ent.x, ent.y + alienBobbingY + modelYOffset, ent.z) * Matrix_Rotate_Y(angle + 1.5708f) * Matrix_Rotate_Z(alienWobbleZ) * Matrix_Scale(ent.scale, ent.scale, ent.scale);
 
                 // Pisca-pisca ao ser baleado: decai e alterna intensidade
                 if (ent.hitFlash > 0.0f)
@@ -1629,9 +1631,9 @@ int main(int argc, char *argv[])
                 glUniform1i(g_object_id_uniform, ALIEN);
                 // Mapeamento condicional do modelo
                 if (ent.behavior == ALIEN_SHOOTER) {
-                    DrawModel(&scorpionModel);
-                } else {
                     DrawModel(&alienModel);
+                } else {
+                    DrawModel(&scorpionModel);
                 }
                 glUniform1f(g_hit_flash_uniform, 0.0f); // restaura para próximos draws
             }
