@@ -634,6 +634,38 @@ bool CheckWallCollision(float x, float y_foot, float z, float radius, float heig
     return false;
 }
 
+// Versão "step-aware": ignora paredes verticais cuja parte mais alta fica até
+// `stepClearance` acima de `y_foot`. Isso permite que inimigos descendo um
+// degrau não sejam bloqueados pelo "riser" do próprio degrau (que tem normal
+// horizontal e por isso conta como parede). Paredes de verdade — que sobem bem
+// acima do alien — continuam bloqueando normalmente.
+bool CheckWallCollisionStepAware(float x, float y_foot, float z, float radius, float height, float stepClearance)
+{
+    glm::vec2 p(x, z);
+    float margin = radius * 2.0f;
+
+    for (const auto &tri : g_MapTriangles)
+    {
+        if (abs(tri.normal.y) >= 0.5f)
+            continue;
+        if (y_foot + height < tri.minY || y_foot > tri.maxY)
+            continue;
+        // Triângulo é curto o suficiente para o inimigo passar por cima.
+        if (tri.maxY <= y_foot + stepClearance)
+            continue;
+        if (x + margin < tri.minX || x - margin > tri.maxX || z + margin < tri.minZ || z - margin > tri.maxZ)
+            continue;
+
+        if (PointToSegmentDistance(p, glm::vec2(tri.v0.x, tri.v0.z), glm::vec2(tri.v1.x, tri.v1.z)) < radius ||
+            PointToSegmentDistance(p, glm::vec2(tri.v1.x, tri.v1.z), glm::vec2(tri.v2.x, tri.v2.z)) < radius ||
+            PointToSegmentDistance(p, glm::vec2(tri.v2.x, tri.v2.z), glm::vec2(tri.v0.x, tri.v0.z)) < radius)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Verifica colisão do Jogador com Caixas
 // Verifica colisão do Jogador com Caixas e Coleta Itens
 bool CheckEntityCollision(glm::vec3 nextPos, float playerRadius, float playerHeight)
@@ -1504,7 +1536,11 @@ int main(int argc, char *argv[])
                                 if (ent.y - fY > ALIEN_STEP_DOWN)
                                     return false; // Despenhadeiro
 
-                                if (CheckWallCollision(nX, fY, nZ, 0.3f, 1.0f))
+                                // Wall check step-aware: ignora "paredinhas" (risers de
+                                // degrau pequeno) cuja altura cabe dentro do passo do
+                                // alien — assim ele consegue descer escadas/curbs sem
+                                // ficar travado na lateral do degrau.
+                                if (CheckWallCollisionStepAware(nX, fY, nZ, 0.3f, 1.0f, STEP_HEIGHT))
                                     return false;
 
                                 outX = nX;
