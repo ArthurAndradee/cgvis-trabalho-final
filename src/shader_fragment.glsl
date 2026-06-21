@@ -64,10 +64,10 @@ void main()
 
     if (object_id == ALIEN) {
         K_s = vec3(0.5); 
-        q = 32.0;
+        q = 64.0;
     } else if (object_id == GUN) {
         K_s = vec3(0.8); 
-        q = 64.0;
+        q = 128.0;
     }
 
     vec3 I_a = vec3(0.3, 0.3, 0.3); 
@@ -77,11 +77,11 @@ void main()
     vec3 K_a = Kd0;
     vec3 K_d = Kd0;
 
-    vec4 r = -l + 2.0 * n * dot(n, l);
+    vec4 h = normalize(l + v);
 
     vec3 ambient_term  = K_a * I_a;
     vec3 diffuse_term  = K_d * I_d * max(0.0, dot(n, l));
-    vec3 specular_term = K_s * I_s * pow(max(0.0, dot(v, r)), q);
+    vec3 specular_term = K_s * I_s * pow(max(0.0, dot(n, h)), q);
 
     color.rgb = ambient_term + diffuse_term + specular_term;
     color.a = 1.0;
