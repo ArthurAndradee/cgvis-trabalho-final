@@ -22,6 +22,10 @@ uniform mat4 projection;
 uniform int object_id;
 uniform float hit_flash; // 0.0 = sem efeito, 1.0 = totalmente vermelho
 
+// Headlamp point light no jogador (muzzle flash quando atira).
+uniform vec3  player_light_pos;       // posição mundo
+uniform float player_light_intensity; // multiplicador (0 = desligado, 1 = normal, 3-5 = muzzle flash)
+
 // AGORA O SHADER SÓ PRECISA DE UM SAMPLER PARA RENDERIZAR TUDO!
 uniform sampler2D TextureImage;
 
@@ -83,7 +87,21 @@ void main()
     vec3 diffuse_term  = K_d * I_d * max(0.0, dot(n, l));
     vec3 specular_term = K_s * I_s * pow(max(0.0, dot(n, h)), q);
 
-    color.rgb = ambient_term + diffuse_term + specular_term;
+    // ------ Headlamp point light no jogador ------
+    // Luz pontual segue a câmera. Atenuação 1 / (1 + k * d^2).
+    // Quando dispara, player_light_intensity sobe e cria um efeito de muzzle
+    // flash que acende o ambiente local por uns frames.
+    vec3 toLight = player_light_pos - p.xyz;
+    float dist2  = dot(toLight, toLight);
+    float dist   = sqrt(dist2);
+    vec4 lp = vec4(toLight / max(dist, 0.0001), 0.0);
+    float atten = 1.0 / (1.0 + 0.15 * dist2);
+    vec4 hp = normalize(lp + v);
+    vec3 I_p = vec3(1.0, 0.95, 0.85) * player_light_intensity; // ligeiramente amarelado
+    vec3 diffuse_player  = K_d * I_p * max(0.0, dot(n, lp)) * atten;
+    vec3 specular_player = K_s * I_p * pow(max(0.0, dot(n, hp)), q) * atten;
+
+    color.rgb = ambient_term + diffuse_term + specular_term + diffuse_player + specular_player;
     color.a = 1.0;
 
     // Pisca-pisca vermelho ao levar tiro

@@ -196,7 +196,7 @@ float g_TorsoPositionY = 0.0f;
 bool g_UsePerspectiveProjection = true;
 bool g_ShowInfoText = true;
 GLuint g_GpuProgramID = 0;
-GLint g_model_uniform, g_view_uniform, g_projection_uniform, g_object_id_uniform, g_bbox_min_uniform, g_bbox_max_uniform, g_hit_flash_uniform;
+GLint g_model_uniform, g_view_uniform, g_projection_uniform, g_object_id_uniform, g_bbox_min_uniform, g_bbox_max_uniform, g_hit_flash_uniform, g_player_light_pos_uniform, g_player_light_intensity_uniform;
 GLuint g_NumLoadedTextures = 0;
 
 std::string nomeAlien;
@@ -560,6 +560,8 @@ void LoadShadersFromFiles()
     g_bbox_min_uniform = glGetUniformLocation(g_GpuProgramID, "bbox_min");
     g_bbox_max_uniform = glGetUniformLocation(g_GpuProgramID, "bbox_max");
     g_hit_flash_uniform = glGetUniformLocation(g_GpuProgramID, "hit_flash");
+    g_player_light_pos_uniform = glGetUniformLocation(g_GpuProgramID, "player_light_pos");
+    g_player_light_intensity_uniform = glGetUniformLocation(g_GpuProgramID, "player_light_intensity");
     glUseProgram(g_GpuProgramID);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage0"), 0);
     glUseProgram(0);
@@ -991,6 +993,7 @@ int main(int argc, char *argv[])
     float recoilTimer = 0.0f;
     float RECOIL_DURATION = 0.25f;
     float RECOIL_DISTANCE = 0.6f;
+    float muzzleFlashTimer = 0.0f; // segundos restantes do "boost" da headlamp ao atirar
 
     // Con
     glm::vec2 playerVelocityXZ(0.0f, 0.0f); // NOVO: Vetor de Inércia Lateral
@@ -1009,10 +1012,26 @@ int main(int argc, char *argv[])
         glUseProgram(g_GpuProgramID);
         glUniform1f(g_hit_flash_uniform, 0.0f); // default: sem flash
 
+        // Headlamp do jogador. Intensidade base = 1; boost grande ao atirar
+        // (muzzle flash) decai em ~0.12s. Posição segue a câmera.
+        if (muzzleFlashTimer > 0.0f) {
+            // deltaTime ainda não foi calculado para esse frame; decai depois
+        }
+        float playerLightIntensity = 1.0f + 5.0f * muzzleFlashTimer / 0.12f;
+        glUniform3f(g_player_light_pos_uniform,
+                    g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z);
+        glUniform1f(g_player_light_intensity_uniform, playerLightIntensity);
+
         static float lastTime = (float)glfwGetTime();
         float currentTime = (float)glfwGetTime();
         float deltaTime = currentTime - lastTime;
         lastTime = currentTime;
+
+        // Decai o timer da muzzle flash (após deltaTime ser conhecido).
+        if (muzzleFlashTimer > 0.0f) {
+            muzzleFlashTimer -= deltaTime;
+            if (muzzleFlashTimer < 0.0f) muzzleFlashTimer = 0.0f;
+        }
 
         static bool playerWon = false;
         glm::vec3 winTarget(12.56f, -5.55f, -29.83f);
@@ -1549,6 +1568,7 @@ int main(int argc, char *argv[])
         if (g_LeftMouseButtonPressed && recoilTimer == 0.0f && g_PlayerHP > 0 && g_PlayerAmmo > 0)
         {
             recoilTimer += deltaTime;
+            muzzleFlashTimer = 0.12f; // ~120ms de flash
             g_PlayerAmmo--; // Consome 1 bala
 
             Projectile proj;

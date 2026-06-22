@@ -26,3 +26,4 @@ Duda:
 8. third person camera is too zoomed out so i can see map stuff around can we confine the camera
 9. can we add a start screen with 'press enter to start'
 10. make it fullscreen
+11. add a muzzle flash effect when firing
