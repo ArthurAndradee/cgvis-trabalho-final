@@ -29,6 +29,7 @@
 #include <stb_image.h>
 #include "utils.h"
 #include "matrices.h"
+#include "collisions.h"
 
 // Definições de IDs
 #define WALL 1
@@ -137,8 +138,6 @@ struct EntitySpawn
     float hitFlash;      // segundos de pisca-pisca vermelho restantes
 };
 
-// Spawns dos Aliens e do Portal (Y Aumentado em +1.0f para caírem de pé)
-// Spawns dos Aliens, do Portal e dos Itens Coletáveis (Coordenadas Atualizadas)
 std::vector<EntitySpawn> mapEntities = {
     { ALIEN,   4.27f, -1.16f, -14.56f, 0.5f, 0.0f, CHASER,  0.0f, 3, 0.0f },
     { ALIEN,  -0.34f, -1.51f, -21.68f, 0.5f, 0.0f, SHOOTER, 1.0f, 3, 0.0f },
@@ -150,7 +149,6 @@ std::vector<EntitySpawn> mapEntities = {
     { ALIEN,   4.77f,  0.59f, -43.51f, 0.5f, 0.0f, SHOOTER, 1.2f, 3, 0.0f },
     { ALIEN,   4.41f,  0.59f, -44.73f, 0.5f, 0.0f, CHASER,  0.0f, 3, 0.0f },
     { ALIEN,   2.10f,  0.49f, -44.06f, 0.5f, 0.0f, CHASER,  0.0f, 3, 0.0f },
-    { PORTAL,  7.22f,  0.69f, -44.22f, 1.0f, 0.0f, 0,             0.0f, 0, 0.0f },
 
     // --- 3 CAIXAS DE MUNIÇÃO RENDERIZADAS COM MODELO PADRÃO (BOX) ---
     { AMMO_BOX,   5.23f, -2.10f, -14.09f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f }, 
@@ -251,47 +249,6 @@ void ScrollCallback(GLFWwindow *window, double xoffset, double yoffset)
 
 void Correcao_KeyCallback(int key, int action, int mod);
 
-// --- ESTRUTURAS E FUNÇÕES MOVIDAS PARA RESOLVER DEPENDÊNCIA DE ESCOPO ---
-struct MapTriangle {
-    glm::vec3 v0, v1, v2;
-    glm::vec3 normal;
-    float minX, maxX, minY, maxY, minZ, maxZ;
-    std::string shapeName; 
-};
-std::vector<MapTriangle> g_MapTriangles;
-
-bool RayIntersectsTriangle(glm::vec3 rayOrigin, glm::vec3 rayVector, const MapTriangle& inTriangle, float& outDistance) {
-    const float EPSILON = 0.0000001;
-    glm::vec3 vertex0 = inTriangle.v0;
-    glm::vec3 vertex1 = inTriangle.v1;  
-    glm::vec3 vertex2 = inTriangle.v2;
-    glm::vec3 edge1, edge2, h, s, q;
-    float a, f, u, v;
-    
-    edge1 = vertex1 - vertex0;
-    edge2 = vertex2 - vertex0;
-    h = glm::cross(rayVector, edge2);
-    a = glm::dot(edge1, h);
-    
-    if (a > -EPSILON && a < EPSILON) return false;
-    
-    f = 1.0/a;
-    s = rayOrigin - vertex0;
-    u = f * glm::dot(s, h);
-    if (u < 0.0 || u > 1.0) return false;
-    
-    q = glm::cross(s, edge1);
-    v = f * glm::dot(rayVector, q);
-    if (v < 0.0 || u + v > 1.0) return false;
-    
-    float t = f * glm::dot(edge2, q);
-    if (t > EPSILON) {
-        outDistance = t;
-        return true;
-    } else {
-        return false;
-    }
-}
 // -----------------------------------------------------------------------
 
 void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mod)
@@ -497,12 +454,6 @@ void HUD_DrawHeart(float cx, float cy, float size, float aspect, float r, float 
     }
 }
 
-// ============================================================================
-// SISTEMA DE FÍSICA OTIMIZADO (COLLISION MESH)
-// ============================================================================
-
-// Converte a malha pesada do Obj para um formato super-leve de cálculos de física
-// Converte a malha pesada do Obj para um formato super-leve de cálculos de física
 void BuildPhysicsMesh(const ObjModel &model, float scale)
 {
     g_MapTriangles.clear();
@@ -511,12 +462,9 @@ void BuildPhysicsMesh(const ObjModel &model, float scale)
     {
         const auto &shape = model.shapes[shape_idx];
 
-        // --- FILTRO DE EXCLUSÃO ---
-        // Pula a física da porta para o jogador poder atravessar
         if (shape.name == "bsp_model_5" || 
             shape.name == "bsp_model_6" ||
-            shape.name == "bsp_model_29_23"
-        ) {
+            shape.name == "bsp_model_29_23") {
             continue; 
         }
 
@@ -528,197 +476,12 @@ void BuildPhysicsMesh(const ObjModel &model, float scale)
             glm::vec3 v0(model.attrib.vertices[3 * i0.vertex_index + 0], model.attrib.vertices[3 * i0.vertex_index + 1], model.attrib.vertices[3 * i0.vertex_index + 2]);
             glm::vec3 v1(model.attrib.vertices[3 * i1.vertex_index + 0], model.attrib.vertices[3 * i1.vertex_index + 1], model.attrib.vertices[3 * i1.vertex_index + 2]);
             glm::vec3 v2(model.attrib.vertices[3 * i2.vertex_index + 0], model.attrib.vertices[3 * i2.vertex_index + 1], model.attrib.vertices[3 * i2.vertex_index + 2]);
-            v0 *= scale;
-            v1 *= scale;
-            v2 *= scale;
-
-            glm::vec3 cross = glm::cross(v1 - v0, v2 - v0);
-            if (glm::length(cross) < 0.0001f)
-                continue;
-            glm::vec3 normal = glm::normalize(cross);
-
-            MapTriangle tri;
-            tri.v0 = v0;
-            tri.v1 = v1;
-            tri.v2 = v2;
-            tri.normal = normal;
-            tri.minX = std::min({v0.x, v1.x, v2.x});
-            tri.maxX = std::max({v0.x, v1.x, v2.x});
-            tri.minY = std::min({v0.y, v1.y, v2.y});
-            tri.maxY = std::max({v0.y, v1.y, v2.y});
-            tri.minZ = std::min({v0.z, v1.z, v2.z});
-            tri.maxZ = std::max({v0.z, v1.z, v2.z});
             
-            tri.shapeName = unique_name; // Guarda a referência!
-
-            g_MapTriangles.push_back(tri);
+            // Agora delega o trabalho pesado e criação da struct para o arquivo collisions.cpp
+            AddTriangleToPhysicsMesh(v0 * scale, v1 * scale, v2 * scale, unique_name);
         }
     }
-    printf("- Malha de Fisica gerada com %lu triangulos.\n", (unsigned long)g_MapTriangles.size()); // Aviso de cast resolvido
-}
-
-bool CheckAABB(glm::vec3 posA, glm::vec3 sizeA, glm::vec3 posB, glm::vec3 sizeB)
-{
-    bool collisionX = posA.x + sizeA.x >= posB.x - sizeB.x && posB.x + sizeB.x >= posA.x - sizeA.x;
-    bool collisionY = posA.y + sizeA.y >= posB.y - sizeB.y && posB.y + sizeB.y >= posA.y - sizeA.y;
-    bool collisionZ = posA.z + sizeA.z >= posB.z - sizeB.z && posB.z + sizeB.z >= posA.z - sizeA.z;
-    return collisionX && collisionY && collisionZ;
-}
-
-float PointToSegmentDistance(glm::vec2 p, glm::vec2 a, glm::vec2 b)
-{
-    glm::vec2 ab = b - a;
-    glm::vec2 ap = p - a;
-    float dot_ab_ab = glm::dot(ab, ab);
-    if (dot_ab_ab <= 0.0001f)
-        return glm::length(p - a);
-    float t = glm::dot(ap, ab) / dot_ab_ab;
-    t = std::max(0.0f, std::min(1.0f, t));
-    glm::vec2 closest = a + t * ab;
-    return glm::length(p - closest);
-}
-
-// Scanner OTIMIZADO 60 FPS: Encontra o Chão usando as pré-computações
-float ResolveFloorHeight(float x, float y_current, float z)
-{
-    float bestY = -9999.0f;
-    for (const auto &tri : g_MapTriangles)
-    {
-        if (tri.normal.y <= 0.5f)
-            continue; // Pula paredes verticais e tetos
-        if (x < tri.minX || x > tri.maxX || z < tri.minZ || z > tri.maxZ)
-            continue; // Pula se estiver longe (Culling O(1))
-
-        float denom = (tri.v1.z - tri.v2.z) * (tri.v0.x - tri.v2.x) + (tri.v2.x - tri.v1.x) * (tri.v0.z - tri.v2.z);
-        if (abs(denom) < 0.0001f)
-            continue;
-
-        float w1 = ((tri.v1.z - tri.v2.z) * (x - tri.v2.x) + (tri.v2.x - tri.v1.x) * (z - tri.v2.z)) / denom;
-        float w2 = ((tri.v2.z - tri.v0.z) * (x - tri.v2.x) + (tri.v0.x - tri.v2.x) * (z - tri.v2.z)) / denom;
-        float w3 = 1.0f - w1 - w2;
-
-        if (w1 >= -0.01f && w2 >= -0.01f && w3 >= -0.01f)
-        {
-            float hitY = w1 * tri.v0.y + w2 * tri.v1.y + w3 * tri.v2.y;
-            if (hitY > bestY && hitY <= y_current + 1.2f)
-            { // Sobe escadas e rampas
-                bestY = hitY;
-            }
-        }
-    }
-    return bestY;
-}
-
-// Scanner OTIMIZADO 60 FPS: Bate em paredes
-bool CheckWallCollision(float x, float y_foot, float z, float radius, float height)
-{
-    glm::vec2 p(x, z);
-    float margin = radius * 2.0f;
-
-    for (const auto &tri : g_MapTriangles)
-    {
-        if (abs(tri.normal.y) >= 0.5f)
-            continue; // Pula chão e teto
-        if (y_foot + height < tri.minY || y_foot > tri.maxY)
-            continue; // Pula se estiver alto/baixo demais (Culling)
-        if (x + margin < tri.minX || x - margin > tri.maxX || z + margin < tri.minZ || z - margin > tri.maxZ)
-            continue;
-
-        if (PointToSegmentDistance(p, glm::vec2(tri.v0.x, tri.v0.z), glm::vec2(tri.v1.x, tri.v1.z)) < radius ||
-            PointToSegmentDistance(p, glm::vec2(tri.v1.x, tri.v1.z), glm::vec2(tri.v2.x, tri.v2.z)) < radius ||
-            PointToSegmentDistance(p, glm::vec2(tri.v2.x, tri.v2.z), glm::vec2(tri.v0.x, tri.v0.z)) < radius)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Versão "step-aware": ignora paredes verticais cuja parte mais alta fica até
-// `stepClearance` acima de `y_foot`. Isso permite que inimigos descendo um
-// degrau não sejam bloqueados pelo "riser" do próprio degrau (que tem normal
-// horizontal e por isso conta como parede). Paredes de verdade — que sobem bem
-// acima do alien — continuam bloqueando normalmente.
-bool CheckWallCollisionStepAware(float x, float y_foot, float z, float radius, float height, float stepClearance)
-{
-    glm::vec2 p(x, z);
-    float margin = radius * 2.0f;
-
-    for (const auto &tri : g_MapTriangles)
-    {
-        if (abs(tri.normal.y) >= 0.5f)
-            continue;
-        if (y_foot + height < tri.minY || y_foot > tri.maxY)
-            continue;
-        // Triângulo é curto o suficiente para o inimigo passar por cima.
-        if (tri.maxY <= y_foot + stepClearance)
-            continue;
-        if (x + margin < tri.minX || x - margin > tri.maxX || z + margin < tri.minZ || z - margin > tri.maxZ)
-            continue;
-
-        if (PointToSegmentDistance(p, glm::vec2(tri.v0.x, tri.v0.z), glm::vec2(tri.v1.x, tri.v1.z)) < radius ||
-            PointToSegmentDistance(p, glm::vec2(tri.v1.x, tri.v1.z), glm::vec2(tri.v2.x, tri.v2.z)) < radius ||
-            PointToSegmentDistance(p, glm::vec2(tri.v2.x, tri.v2.z), glm::vec2(tri.v0.x, tri.v0.z)) < radius)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Verifica colisão do Jogador com Caixas
-// Verifica colisão do Jogador com Caixas e Coleta Itens
-bool CheckEntityCollision(glm::vec3 nextPos, float playerRadius, float playerHeight)
-{
-    glm::vec3 pSize(playerRadius, playerHeight / 2.0f, playerRadius);
-    glm::vec3 pPos(nextPos.x, nextPos.y - playerHeight / 2.0f, nextPos.z);
-
-    for (auto &ent : mapEntities)
-    {
-        if (ent.type == 0 || ent.type == PORTAL || ent.type == ALIEN)
-            continue;
-
-        glm::vec3 eSize(0.3f, 0.8f, 0.3f);
-        if (ent.type == BOX)
-            eSize = glm::vec3(0.5f, 0.5f, 0.5f);
-        else if (ent.type == AMMO_BOX || ent.type == HEALTH_BOX)
-            eSize = glm::vec3(ent.scale, ent.scale, ent.scale);
-
-        glm::vec3 ePos(ent.x, ent.y + eSize.y, ent.z);
-
-        if (CheckAABB(pPos, pSize, ePos, eSize))
-        {
-            // --- LÓGICA DE COLETA DE ITENS ---
-            if (ent.type == AMMO_BOX)
-            {
-                if (g_PlayerAmmo < g_PlayerMaxAmmo)
-                {
-                    g_PlayerAmmo += 15; // Ganha 15 tiros
-                    if (g_PlayerAmmo > g_PlayerMaxAmmo)
-                        g_PlayerAmmo = g_PlayerMaxAmmo;
-                    ent.type = 0; // Remove a caixa do mapa
-                    printf("Pegou Municao! Total: %d\n", g_PlayerAmmo);
-                }
-                return false; // Permite atravessar o item coletado
-            }
-            else if (ent.type == HEALTH_BOX)
-            {
-                if (g_PlayerHP < g_PlayerMaxHP)
-                {
-                    g_PlayerHP += 30; // Ganha 30 HP
-                    if (g_PlayerHP > g_PlayerMaxHP)
-                        g_PlayerHP = g_PlayerMaxHP;
-                    ent.type = 0; // Remove a caixa do mapa
-                    printf("Pegou Vida! HP: %d\n", g_PlayerHP);
-                }
-                return false; // Permite atravessar o item coletado
-            }
-
-            // Se for uma BOX comum, bloqueia o movimento
-            return true;
-        }
-    }
-    return false;
+    printf("- Malha de Fisica gerada via collisions.cpp\n");
 }
 
 // ============================================================================
@@ -1236,11 +999,23 @@ int main(int argc, char *argv[])
         float deltaTime = currentTime - lastTime;
         lastTime = currentTime;
 
-        // GAME OVER: HP zerado congela tudo (mantém renderização para mostrar tela)
-        if (g_PlayerHP <= 0)
+        static bool playerWon = false;
+        glm::vec3 winTarget(12.56f, -5.55f, -29.83f);
+        float distToWin = glm::distance(glm::vec3(g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z), winTarget);
+        
+        // Se chegar a menos de 2 metros do ponto (em todos os 3 eixos simulados pela distância Euclidiana)
+        if (distToWin < 2.0f && g_PlayerHP > 0) {
+            playerWon = true;
+        }
+
+        // GAME OVER ou VITÓRIA: congela a física (mantém renderização para mostrar tela)
+        if (g_PlayerHP <= 0 || playerWon)
         {
             deltaTime = 0.0f;
         }
+
+        // ------------------------------------------------------------------------------------
+        // VETORES DA CÂMERA DO JOGADOR
 
         // ------------------------------------------------------------------------------------
         // VETORES DA CÂMERA DO JOGADOR
@@ -1298,7 +1073,7 @@ int main(int argc, char *argv[])
 
         if (destHasFloor(nextPosFlat.x, nextPosFlat.z) &&
             !CheckWallCollision(nextPosFlat.x, nextPosFlat.y - PLAYER_HEIGHT, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-            !CheckEntityCollision(nextPosFlat, PLAYER_RADIUS, PLAYER_HEIGHT)) {
+            !CheckEntityCollision(nextPosFlat, PLAYER_RADIUS, PLAYER_HEIGHT, mapEntities, g_PlayerAmmo, g_PlayerMaxAmmo, g_PlayerHP, g_PlayerMaxHP)) {
             g_CameraPosition.x = nextPosFlat.x;
             g_CameraPosition.z = nextPosFlat.z;
             moved = true;
@@ -1307,7 +1082,7 @@ int main(int argc, char *argv[])
             float raisedFootY = (g_CameraPosition.y - PLAYER_HEIGHT) + STEP_HEIGHT;
             if (destHasFloor(nextPosFlat.x, nextPosFlat.z) &&
                 !CheckWallCollision(nextPosFlat.x, raisedFootY, nextPosFlat.z, PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT) &&
-                !CheckEntityCollision(glm::vec3(nextPosFlat.x, g_CameraPosition.y + STEP_HEIGHT, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT)) {
+                !CheckEntityCollision(glm::vec3(nextPosFlat.x, g_CameraPosition.y + STEP_HEIGHT, nextPosFlat.z), PLAYER_RADIUS, PLAYER_HEIGHT - STEP_HEIGHT, mapEntities, g_PlayerAmmo, g_PlayerMaxAmmo, g_PlayerHP, g_PlayerMaxHP)) {
                 
                 float candidateFloor = ResolveFloorHeight(nextPosFlat.x, raisedFootY, nextPosFlat.z);
                 float currentFoot = g_CameraPosition.y - PLAYER_HEIGHT;
@@ -1628,7 +1403,7 @@ int main(int argc, char *argv[])
                             float pushFloorY = ResolveFloorHeight(pushPos.x, g_CameraPosition.y, pushPos.z);
                             if (pushFloorY > -9000.0f &&
                                 !CheckWallCollision(pushPos.x, pushPos.y - PLAYER_HEIGHT, pushPos.z, PLAYER_RADIUS, PLAYER_HEIGHT) &&
-                                !CheckEntityCollision(pushPos, PLAYER_RADIUS, PLAYER_HEIGHT)) {
+                                !CheckEntityCollision(pushPos, PLAYER_RADIUS, PLAYER_HEIGHT, mapEntities, g_PlayerAmmo, g_PlayerMaxAmmo, g_PlayerHP, g_PlayerMaxHP)) {
                                 g_CameraPosition.x = pushPos.x;
                                 g_CameraPosition.z = pushPos.z;
                             }
@@ -2017,6 +1792,12 @@ int main(int argc, char *argv[])
             {
                 TextRendering_SetColor(1.0f, 0.2f, 0.2f);
                 TextRendering_PrintString(window, "YOU DIED", -0.22f, 0.05f, 3.0f);
+                TextRendering_SetColor(0.0f, 0.0f, 0.0f);
+            } 
+            else if (playerWon) 
+            {
+                TextRendering_SetColor(0.2f, 1.0f, 0.2f); // Verde
+                TextRendering_PrintString(window, "YOU ESCAPED!", -0.25f, 0.05f, 3.0f);
                 TextRendering_SetColor(0.0f, 0.0f, 0.0f);
             }
         }
