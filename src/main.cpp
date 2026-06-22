@@ -960,6 +960,10 @@ int main(int argc, char *argv[])
     ComputeNormals(&projectileModel);
     BuildTrianglesAndAddToVirtualScene(&projectileModel, "../../assets/projectile/");
 
+    ObjModel bulletModel("../../assets/bullet_obj/QVSGI1IBGLBEVYLUBSQFLVVQD.obj");
+    ComputeNormals(&bulletModel);
+    BuildTrianglesAndAddToVirtualScene(&bulletModel, "../../assets/bullet_obj/");
+
     // PRÉ-COMPUTA A FÍSICA PARA 60FPS
     BuildPhysicsMesh(quakeMapModel, g_MapScale);
 
@@ -1600,10 +1604,17 @@ int main(int argc, char *argv[])
                 pitch = asin(-dir.y);
             }
 
-            model = Matrix_Translate(pos.x, pos.y, pos.z) * Matrix_Rotate_Y(yaw) * Matrix_Rotate_X(pitch) * Matrix_Scale(0.02f, 0.02f, 0.6f);
+            // O Rotate_Y(1.5708f) vira ela em 90 graus caso o .obj original esteja "de lado". Pode ser removido se ela voar torta.
+            model = Matrix_Translate(pos.x, pos.y, pos.z) 
+                  * Matrix_Rotate_Y(yaw) 
+                  * Matrix_Rotate_X(pitch + 1.5708f)
+                  * Matrix_Scale(0.05f, 0.05f, 0.05f); 
+                  
             glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-            glUniform1i(g_object_id_uniform, BULLET);
-            DrawVirtualObject("laser_cylinder");
+            
+            // Alterar o ID para não cair na cor pura "Amarelo Fluorescente" que criamos no Shader para o laser
+            glUniform1i(g_object_id_uniform, BOX); 
+            DrawModel(&bulletModel); // Desenha a bala 3D em vez do cilindro
         }
         g_Projectiles.erase(std::remove_if(g_Projectiles.begin(), g_Projectiles.end(), [](const Projectile &p)
                                            { return !p.active; }),
