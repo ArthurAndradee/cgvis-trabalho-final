@@ -105,6 +105,7 @@ float g_CameraTheta = 3.141592f; // spawn olhando p frente
 float g_CameraPhi = 0.0f;
 float g_CameraDistance = 3.5f;
 bool  g_ThirdPerson = false; // Toggle de câmera (C)
+bool  g_GameStarted = false; // Tela de início — true depois que o jogador aperta ENTER
 
 // ============================================================================
 // CONFIGURAÇÕES DA FASE E ENTIDADES
@@ -278,6 +279,7 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mod)
 
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS)
     {
+        if (!g_GameStarted) g_GameStarted = true;
         g_AngleX = 0.0f;
         g_AngleY = 0.0f;
         g_AngleZ = 0.0f;
@@ -907,7 +909,16 @@ int main(int argc, char *argv[])
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow *window = glfwCreateWindow(800, 600, "INF01047 - Quack", NULL, NULL);
+    // Fullscreen borderless: pega o monitor primário, lê o modo de vídeo atual,
+    // configura uma janela sem borda no tamanho do monitor. Mantém alt-tab.
+    GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+    glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+    glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+    glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+
+    GLFWwindow *window = glfwCreateWindow(mode->width, mode->height, "INF01047 - Quack", monitor, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -922,7 +933,7 @@ int main(int argc, char *argv[])
     glfwMakeContextCurrent(window);
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
-    FramebufferSizeCallback(window, 800, 600);
+    FramebufferSizeCallback(window, mode->width, mode->height);
 
     LoadShadersFromFiles();
 
@@ -1013,7 +1024,7 @@ int main(int argc, char *argv[])
         }
 
         // GAME OVER ou VITÓRIA: congela a física (mantém renderização para mostrar tela)
-        if (g_PlayerHP <= 0 || playerWon)
+        if (g_PlayerHP <= 0 || playerWon || !g_GameStarted)
         {
             deltaTime = 0.0f;
         }
@@ -1811,6 +1822,25 @@ int main(int argc, char *argv[])
                 TextRendering_PrintString(window, "YOU ESCAPED!", -0.25f, 0.05f, 3.0f);
                 TextRendering_SetColor(0.0f, 0.0f, 0.0f);
             }
+        }
+
+        // Tela de início: overlay escuro + título + "PRESS ENTER TO START".
+        // Fica por cima de tudo até o ENTER ser pressionado.
+        if (!g_GameStarted)
+        {
+            glDisable(GL_DEPTH_TEST);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            HUD_DrawRect(-1.0f, -1.0f, 2.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.75f);
+            glDisable(GL_BLEND);
+            glEnable(GL_DEPTH_TEST);
+
+            TextRendering_SetColor(1.0f, 1.0f, 1.0f);
+            TextRendering_PrintString(window, "QUACK",           -0.25f,  0.20f, 4.0f);
+            TextRendering_PrintString(window, "PRESS ENTER TO START", -0.30f, -0.10f, 2.0f);
+            TextRendering_PrintString(window, "WASD - move    MOUSE - look    LMB - shoot",     -0.45f, -0.35f, 1.2f);
+            TextRendering_PrintString(window, "SPACE - jump    C - third person    ESC - quit", -0.45f, -0.45f, 1.2f);
+            TextRendering_SetColor(0.0f, 0.0f, 0.0f);
         }
 
         glfwSwapBuffers(window);
