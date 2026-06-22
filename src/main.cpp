@@ -41,6 +41,7 @@
 #define PORTAL 7     // ID para o Portal
 #define AMMO_BOX 8   // ID para caixa de Munição
 #define HEALTH_BOX 9 // ID para caixa de Vida
+#define BUTTON 10    // ID para o botão de fim de fase
 
 struct ObjModel
 {
@@ -157,8 +158,11 @@ std::vector<EntitySpawn> mapEntities = {
     { AMMO_BOX,   7.31f, -1.60f, -31.83f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f },
 
     // --- 2 CAIXAS DE VIDA RENDERIZADAS COM MODELO DE PIZZA (PIZZAMODEL) ---
-    { HEALTH_BOX, -8.21f, -0.60f, -42.91f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f }, 
-    { HEALTH_BOX,  4.28f, -1.35f, -46.00f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f }
+    { HEALTH_BOX, -8.21f, -0.60f, -42.91f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f },
+    { HEALTH_BOX,  4.28f, -1.35f, -46.00f, 0.3f, 0.0f, 0, 0.0f, 0, 0.0f },
+
+    // --- BOTÃO DE VITÓRIA ---
+    { BUTTON,    12.94f, -7.00f, -32.23f, 0.4f, 0.0f, 0, 0.0f, 0, 0.0f }
 }; // Spawns dos Aliens, do Portal e dos Itens Coletáveis (Coordenadas Atualizadas)
 
 // --- ESTRUTURA E ARMAZENAMENTO DO PROJÉTIL (BEZIER) ---
@@ -977,6 +981,10 @@ int main(int argc, char *argv[])
     ComputeNormals(&bulletModel);
     BuildTrianglesAndAddToVirtualScene(&bulletModel, "../../assets/bullet_obj/");
 
+    ObjModel buttonModel("../../assets/button/AW89M644OEZNDE80N6LZ6EM2H.obj");
+    ComputeNormals(&buttonModel);
+    BuildTrianglesAndAddToVirtualScene(&buttonModel, "../../assets/button/");
+
     // PRÉ-COMPUTA A FÍSICA PARA 60FPS
     BuildPhysicsMesh(quakeMapModel, g_MapScale);
 
@@ -1000,7 +1008,7 @@ int main(int argc, char *argv[])
     float playerVelocityY = 0.0f;
     const float GRAVITY = -15.0f;
     const float JUMP_FORCE = 6.0f;
-    const float PLAYER_HEIGHT = 1.2f;
+    const float PLAYER_HEIGHT = 0.9f;
     const float PLAYER_RADIUS = 0.3f;
     const float STEP_HEIGHT = 0.55f; // Degraus/bumps menores que isso são auto-galgados
     float cameraYSmooth = 0.0f;      // Offset visual decaindo para suavizar subidas
@@ -1034,12 +1042,21 @@ int main(int argc, char *argv[])
         }
 
         static bool playerWon = false;
-        glm::vec3 winTarget(12.56f, -5.55f, -29.83f);
-        float distToWin = glm::distance(glm::vec3(g_CameraPosition.x, g_CameraPosition.y, g_CameraPosition.z), winTarget);
-        
-        // Se chegar a menos de 2 metros do ponto (em todos os 3 eixos simulados pela distância Euclidiana)
-        if (distToWin < 2.0f && g_PlayerHP > 0) {
-            playerWon = true;
+        // Vitória: jogador precisa estar de pé EM CIMA do botão (XZ próximo,
+        // Y dentro do alcance do step-up acima dele). Usa a posição real do
+        // botão no mapa em vez de uma cópia hardcoded.
+        for (const auto& ent : mapEntities) {
+            if (ent.type != BUTTON) continue;
+            float dx = g_CameraPosition.x - ent.x;
+            float dz = g_CameraPosition.z - ent.z;
+            float distXZ = sqrtf(dx*dx + dz*dz);
+            float footY  = g_CameraPosition.y - 0.9f; // PLAYER_HEIGHT
+            float dy     = footY - ent.y;
+            // Raio do botão (~0.5 com scale 0.4) + raio do jogador (~0.3)
+            const float TRIGGER_RADIUS = 0.8f;
+            if (distXZ < TRIGGER_RADIUS && dy > -0.3f && dy < 1.5f && g_PlayerHP > 0) {
+                playerWon = true;
+            }
         }
 
         // GAME OVER ou VITÓRIA: congela a física (mantém renderização para mostrar tela)
@@ -1551,6 +1568,20 @@ int main(int argc, char *argv[])
                 glUniform1i(g_object_id_uniform, HEALTH_BOX);
                 DrawModel(&pizzaModel); // Modelo da Caixa de Pizza
             }
+            else if (ent.type == BUTTON)
+            {
+                // Botão de vitória: snap pro chão, mas a busca começa só um
+                // pouquinho acima do spawn pra não pegar plataforma de cima
+                // numa espiral. Pulsa de leve.
+                float floor = ResolveFloorHeight(ent.x, ent.y + 0.1f, ent.z);
+                if (floor > -9000.0f) ent.y = floor;
+                float pulse = 1.0f + 0.05f * sinf(currentTime * 4.0f);
+                model = Matrix_Translate(ent.x, ent.y + 0.05f, ent.z)
+                      * Matrix_Scale(ent.scale * pulse, ent.scale * pulse, ent.scale * pulse);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, BOX);
+                DrawModel(&buttonModel);
+            }
         }
 
         float recoilOffsetL = 0.0f;
@@ -1565,7 +1596,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        if (g_LeftMouseButtonPressed && recoilTimer == 0.0f && g_PlayerHP > 0 && g_PlayerAmmo > 0)
+        if (g_LeftMouseButtonPressed && recoilTimer == 0.0f && g_PlayerHP > 0 && g_PlayerAmmo > 0 && !playerWon)
         {
             recoilTimer += deltaTime;
             muzzleFlashTimer = 0.12f; // ~120ms de flash
@@ -1839,7 +1870,7 @@ int main(int argc, char *argv[])
             else if (playerWon) 
             {
                 TextRendering_SetColor(0.2f, 1.0f, 0.2f); // Verde
-                TextRendering_PrintString(window, "YOU ESCAPED!", -0.25f, 0.05f, 3.0f);
+                TextRendering_PrintString(window, "GAME WON!", -0.22f, 0.05f, 3.0f);
                 TextRendering_SetColor(0.0f, 0.0f, 0.0f);
             }
         }

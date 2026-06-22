@@ -15,8 +15,7 @@ PS E:\university\courses\2026-1\computacao-grafica-e-visualizacao\cgvis-trabalho
 11. De maneira similar, forneça um contador de munição na UI acima da barra de vida, deve ser apenas um contador com o tanto de projéteis restantes/limite máximo. Forneça apenas as partes necessárias que devem ser mudadas. 
 12. Mapeie para que a caixa com health points use o modelo da caixa de pizza, a caixa com munição use o modelo padrão da caixa e os inimigos que estarem disparando projéteis usem o modelo scorpion ao invés do alien:
 13. Faça com que toda a logica de colisao seja processada em um arquivo separado chamado collisions.cpp, tudo relacionado a colisão deve constar apenas e unicamente nesse arquivo...
-14. Remova o portal azul do mapa e faça com que quando o jogador chegue perto (nos 3 eixos) da localização informada o jogo termine com uma tela de You Win ou algo assim: [LOCALIZACAO] X: 12.56 | Y: -5.55 | Z: -29.83...
-15. Preciso que voce use o modelo de bullet para os projeteis lançados pelo personagem
+14. Preciso que voce use o modelo de bullet para os projeteis lançados pelo personagem
 
 Duda: 
 1. when moving, the player is getting stuck on high ledges, I want to be able to fall down regardless of height
@@ -30,3 +29,4 @@ Duda:
 9. can we add a start screen with 'press enter to start'
 10. make it fullscreen
 11. add a muzzle flash effect when firing
+12. add a button at X: 12.94 | Y: -5.55 | Z: -32.23 and make it so touching it prints a GAME WON screen and freezes the game
