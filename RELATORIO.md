@@ -5,11 +5,11 @@ O jogo desenvolvido é um FPS (First Person Shooter) inspirado em Quake, criado 
 
 ## Contribuições da Dupla
 Arthur - Atuou no desenvolvimento das principais partes do jogo, ajudando na documentação e na organização do projeto. Implementou a câmera em primeira pessoa, o carregamento dos modelos 3D e alguns efeitos visuais. Também desenvolveu a inteligência artificial inicial dos inimigos, o sistema de tiros e as animações da arma. Também foram implementadas a lógica das caixas de vida e munição, organizado o código das colisões em um arquivo separado e criado as condições de vitória e fim de jogo.
-Eduarda - 
+Eduarda - Implementação da câmera em terceira pessoa, melhora na iluminação, mostrar quando um tiro acerta o inimigo (com a cor vermelha) e muzzle flash dos tiros, fix nas colisões com degraus tanto do jogador quanto dos inimigos e inimigos mais agressivos, que perseguem melhor e empurram o jogador no contato físico. Implementou também os inimigos à distância - que atiram projéteis no jogador - e o sistema de hp do jogador e dos inimigos. Ademais, criou a tela inicial com os comandos, situações de game over e um objetivo final (botão) que leva a uma tela de vitória.
 
 ## Uso de Ferramentas de IA
 Arthur - Apenas uso do Gemini através do navegador, de maneira que o LLM ajudou com erros de compilação entre versões do MinGW e também auxiliou na implementação de modelos 3D pelo mapa, links de onde encontrar o mapa da beta quake original (mapa usado no trabalho), e também no algoritmo dos disparos com curvas de bézier entre demais partes do código.
-Eduarda - 
+Eduarda - Utilizei o Claude integrado ao VSCode em boa parte do desenvolvimento, como para consertar as colisões e a iluminação. Tentei utilizar de maneira pedagógica - pedia para a IA fazer alguma coisa depois tentava entender o código, tirando dúvidas e fazendo alterações onde fosse pertinente.
 
 ## Imagens da Aplicação
 
@@ -60,3 +60,5 @@ Controles de Debug e Sistema:
     P / O: Alterna o modo da matriz de projeção da câmera (Perspectiva / Ortográfica).
     H: Oculta ou exibe o contador de FPS (Frames Per Second) no topo da tela.
     ESC: Encerra a aplicação.   
+
+Vídeo de demonstração: https://youtu.be/XkkfEPidO90  
