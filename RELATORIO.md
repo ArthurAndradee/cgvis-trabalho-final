@@ -1,4 +1,4 @@
-# Quake Clone - INF01047 (Computação Gráfica e Visualização I)
+# Quake Clone (Quack) - INF01047 (Computação Gráfica e Visualização I)
 
 ## Descrição
 O jogo desenvolvido é um FPS (First Person Shooter) inspirado em Quake, criado em C++ com OpenGL e outras bibliotecas de apoio. Ele possui um motor gráfico e físico próprio para renderizar modelos 3D, controlar colisões entre objetos e detectar interações, como os disparos do jogador. Os inimigos utilizam uma inteligência artificial simples baseada em estados, alternando entre diferentes comportamentos. O jogo também inclui animações da câmera e da arma para tornar a movimentação mais natural, além de uma interface (HUD) que exibe informações importantes ao jogador durante a partida.
