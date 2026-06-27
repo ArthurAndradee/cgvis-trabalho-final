@@ -915,16 +915,14 @@ int main(int argc, char *argv[])
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // Fullscreen borderless: pega o monitor primário, lê o modo de vídeo atual,
-    // configura uma janela sem borda no tamanho do monitor. Mantém alt-tab.
+    // Janela maximizada (não fullscreen): pega o tamanho do monitor pra criar
+    // a janela já grande, e usa a hint MAXIMIZED pra o WM ocupar a área de
+    // trabalho disponível mantendo borda/título e permitindo alt-tab normal.
     GLFWmonitor *monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode *mode = glfwGetVideoMode(monitor);
-    glfwWindowHint(GLFW_RED_BITS, mode->redBits);
-    glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
-    glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
-    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+    glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
 
-    GLFWwindow *window = glfwCreateWindow(mode->width, mode->height, "INF01047 - Quack", monitor, NULL);
+    GLFWwindow *window = glfwCreateWindow(mode->width, mode->height, "INF01047 - Quack", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -939,7 +937,11 @@ int main(int argc, char *argv[])
     glfwMakeContextCurrent(window);
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
-    FramebufferSizeCallback(window, mode->width, mode->height);
+    // Pega o tamanho real do framebuffer (pode ser menor que o monitor por
+    // causa de barra de tarefas / dock) e dispara o callback inicial.
+    int fbw, fbh;
+    glfwGetFramebufferSize(window, &fbw, &fbh);
+    FramebufferSizeCallback(window, fbw, fbh);
 
     LoadShadersFromFiles();
 
