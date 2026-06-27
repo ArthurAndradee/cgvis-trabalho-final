@@ -61,4 +61,4 @@ Controles de Debug e Sistema:
     H: Oculta ou exibe o contador de FPS (Frames Per Second) no topo da tela.
     ESC: Encerra a aplicação.   
 
-Vídeo de demonstração: https://youtu.be/XkkfEPidO90  
+Vídeo de demonstração: https://youtu.be/54pwTnNEHkQ
